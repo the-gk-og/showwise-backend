@@ -41,6 +41,7 @@
           </div>
         </div>
         <form method="POST" action="{{ url_for('update_kill_switch', org_slug=slug) }}" style="margin-bottom: 1rem;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
           <div class="form-group" style="margin-bottom: 0.5rem;">
             <label for="reason_{{ slug }}">Update Reason</label>
             <input type="text" id="reason_{{ slug }}" name="reason" value="{{ kill_switches[slug].get('reason', '') }}" placeholder="Payment overdue">

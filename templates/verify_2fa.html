@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Verify 2FA - ShowWise{% endblock %}
+{% block content %}
+<div style="max-width: 400px; margin: 4rem auto;">
+  <div class="card" style="padding: 2rem;">
+    <h1 style="text-align: center; margin-bottom: 2rem;">
+      <i class="fas fa-shield-alt" style="color: var(--primary); font-size: 2.5rem;"></i>
+    </h1>
+    
+    <h2 style="text-align: center; margin-bottom: 0.5rem;">Two-Factor Authentication</h2>
+    <p style="text-align: center; color: var(--gray-600); margin-bottom: 2rem;">
+      Enter your authenticator code or backup code
+    </p>
+    
+    <form method="POST" style="display: grid; gap: 1.5rem;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div>
+        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Code</label>
+        <input type="text" name="token" placeholder="000000" 
+               style="width: 100%; padding: 0.75rem; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 1.125rem; letter-spacing: 0.2em; text-align: center;"
+               autocomplete="off" required autofocus maxlength="6">
+        <small style="color: var(--gray-600);">Enter 6-digit code from authenticator</small>
+      </div>
+      
+      <div style="border-top: 1px solid var(--gray-300); padding-top: 1rem;">
+        <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+          <input type="checkbox" name="use_backup" style="width: 18px; height: 18px;">
+          <span>Use backup code instead</span>
+        </label>
+        <small style="color: var(--gray-600); display: block;">Use a backup code if you don't have your authenticator</small>
+      </div>
+      
+      <button type="submit" class="btn btn-primary" style="width: 100%;">
+        <i class="fas fa-check"></i> Verify
+      </button>
+      
+      <a href="{{ url_for('login') }}" class="btn btn-secondary" style="width: 100%; text-align: center;">
+        Back to Login
+      </a>
+    </form>
+  </div>
+</div>
+{% endblock %}

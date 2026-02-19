@@ -3,125 +3,97 @@
 {% block content %}
 <div class="page-header">
   <h1><i class="fas fa-comments"></i> Live Chat Dashboard</h1>
-  <p>Customer support messages - {{ total_messages }} total, {{ unread_count }} unread</p>
+  <p>Customer support conversations - {{ total_messages }} total messages, {{ unread_count }} unread</p>
 </div>
 
-<div style="display: grid; gap: 1.5rem;">
-  <div id="messages">
-  {% for msg in messages %}
-  <div class="card {% if not msg.get('read', False) %}style="border-left: 4px solid var(--primary);"{% endif %}">
-    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
-      <div>
-        <div style="font-weight: 800; font-size: 1.125rem; margin-bottom: 0.25rem;">
-          {% if msg.from == 'user' %}
-          <i class="fas fa-user" style="color: var(--primary);"></i> {{ msg.from_name }}
-          {% else %}
-          <i class="fas fa-user-shield" style="color: var(--success);"></i> {{ msg.from_name }} (Admin)
+<div style="display: grid; grid-template-columns: 1fr; gap: 1.5rem; max-width: 100%;">
+  
+  <!-- Conversations List -->
+  <div>
+    <h2 style="font-size: 1.25rem; margin-bottom: 1rem;"><i class="fas fa-inbox"></i> Conversations</h2>
+    
+    {% if conversations %}
+    <div style="display: grid; gap: 0.75rem;">
+      {% for conv in conversations %}
+      <div class="card" style="padding: 1.25rem; cursor: pointer; transition: all 0.2s; {% if conv.unread_count > 0 %}border-left: 4px solid var(--primary); background: #f0f4ff;{% endif %}" onclick="toggleConversation(this, '{{ conv.chat_id }}')">
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.75rem;">
+          <div style="flex: 1;">
+            <div style="font-weight: 800; font-size: 1rem; margin-bottom: 0.25rem;">
+              <i class="fas fa-user" style="color: var(--primary);"></i> {{ conv.user_name }}
+            </div>
+            <div style="font-size: 0.85rem; color: var(--gray-600); margin-bottom: 0.5rem;">
+              {{ conv.org_slug }} {% if conv.user_email %} • {{ conv.user_email }}{% endif %}
+            </div>
+          </div>
+          <div style="text-align: right;">
+            {% if conv.unread_count > 0 %}
+            <span style="background: var(--primary); color: white; padding: 0.35rem 0.75rem; border-radius: 12px; font-size: 0.85rem; font-weight: 700; display: inline-block; margin-bottom: 0.5rem;">
+              {{ conv.unread_count }} UNREAD
+            </span><br>
+            {% endif %}
+            <span style="font-size: 0.8rem; color: var(--gray-600);">
+              {{ conv.message_count }} message{{ 's' if conv.message_count != 1 else '' }}
+            </span>
+          </div>
+        </div>
+        
+        <div style="font-size: 0.85rem; color: var(--gray-700); line-height: 1.4; margin-bottom: 0.5rem;">
+          <i class="fas fa-clock"></i> Last: {{ conv.last_message[:16] }}
+        </div>
+        
+        <!-- Expandable messages section -->
+        <div id="messages-{{ conv.chat_id }}" style="display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--gray-300);">
+          <div style="max-height: 400px; overflow-y: auto; display: grid; gap: 0.75rem;">
+            {% for msg in conv.messages %}
+            <div style="padding: 0.75rem; background: {% if msg.from == 'user' %}#f9f9f9{% else %}#e3f2fd{% endif %}; border-radius: 6px; border-left: 3px solid {% if msg.from == 'user' %}var(--gray-400){% else %}var(--success){% endif %};">
+              <div style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">
+                {% if msg.from == 'user' %}
+                <span style="color: var(--primary);">User: {{ msg.from_name }}</span>
+                {% else %}
+                <span style="color: var(--success);">Admin: {{ msg.from_name }}</span>
+                {% endif %}
+              </div>
+              <div style="font-size: 0.8rem; color: var(--gray-600); margin-bottom: 0.35rem;">
+                {{ msg.timestamp[:16] }} {% if not msg.get('read', False) and msg.from == 'user' %}<span style="color: var(--primary); font-weight: 700;">• UNREAD</span>{% endif %}
+              </div>
+              <div style="font-size: 0.9rem; line-height: 1.4; word-wrap: break-word;">{{ msg.message }}</div>
+            </div>
+            {% endfor %}
+          </div>
+          
+          <!-- Reply form -->
+          {% if conv.unread_count > 0 %}
+          <form method="POST" action="{{ url_for('reply_chat', msg_id=conv.messages[0].id) }}" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--gray-300); display: grid; gap: 0.75rem;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <textarea name="reply" required placeholder="Type your reply..." style="min-height: 70px; padding: 0.75rem; border: 1px solid var(--gray-300); border-radius: 6px; font-family: inherit;"></textarea>
+            <div style="display: flex; gap: 0.5rem;">
+              <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Send Reply</button>
+              <a href="{{ url_for('mark_chat_read', msg_id=conv.messages[0].id) }}" class="btn btn-secondary"><i class="fas fa-check"></i> Mark Read</a>
+            </div>
+          </form>
           {% endif %}
         </div>
-        <div style="font-size: 0.85rem; color: var(--gray-600);">
-          {{ msg.org_slug }} • {{ msg.timestamp[:19] }}
-          {% if msg.from_email %} • {{ msg.from_email }}{% endif %}
-        </div>
       </div>
-      <div>
-        {% if not msg.get('read', False) and msg.from == 'user' %}
-        <span style="background: var(--primary); color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem; font-weight: 700;">UNREAD</span>
-        {% endif %}
-      </div>
+      {% endfor %}
     </div>
-    <div style="background: var(--gray-50); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-      <p style="line-height: 1.6; margin: 0;">{{ msg.message }}</p>
-    </div>
-    {% if msg.from == 'user' and not msg.get('read', False) %}
-    <form method="POST" action="{{ url_for('reply_chat', msg_id=msg.id) }}" style="display: grid; gap: 1rem;">
-      <textarea name="reply" required placeholder="Type your reply..." style="min-height: 80px;"></textarea>
-      <div style="display: flex; gap: 0.5rem;">
-        <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Send Reply</button>
-        <a href="{{ url_for('mark_chat_read', msg_id=msg.id) }}" class="btn btn-secondary"><i class="fas fa-check"></i> Mark Read</a>
-      </div>
-    </form>
-    {% elif msg.get('reply_to') %}
-    <div style="padding: 0.5rem 0; color: var(--gray-600); font-size: 0.85rem;">
-      <i class="fas fa-reply"></i> Reply to message #{{ msg.reply_to }}
+    {% else %}
+    <div class="card" style="text-align: center; padding: 4rem 2rem;">
+      <div style="font-size: 3rem; color: var(--gray-400); margin-bottom: 1rem;"><i class="fas fa-comments"></i></div>
+      <h2>No Conversations Yet</h2>
+      <p style="color: var(--gray-600);">Chat messages from instances will appear here</p>
     </div>
     {% endif %}
   </div>
-  {% endfor %}
-  </div>
 </div>
 
-{% if not messages %}
-<div class="card" style="text-align: center; padding: 4rem 2rem;">
-  <div style="font-size: 3rem; color: var(--gray-400); margin-bottom: 1rem;"><i class="fas fa-comments"></i></div>
-  <h2>No Messages Yet</h2>
-  <p style="color: var(--gray-600);">Chat messages from instances will appear here</p>
-</div>
-{% endif %}
-
-<script>
-// Subscribe to server-sent events for new chat messages
-if (!!window.EventSource) {
-  const evtSource = new EventSource('/api/chat/stream');
-  evtSource.onmessage = function(e) {
-    try {
-      const msg = JSON.parse(e.data);
-      const container = document.getElementById('messages');
-      if (!container) return;
-
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
-          <div>
-            <div style="font-weight: 800; font-size: 1.125rem; margin-bottom: 0.25rem;">
-              <i class="fas fa-user" style="color: var(--primary);"></i> ${msg.from_name}
-            </div>
-            <div style="font-size: 0.85rem; color: var(--gray-600);">
-              ${msg.org_slug} • ${msg.timestamp.slice(0,19)} ${msg.from_email ? ' • ' + msg.from_email : ''}
-            </div>
-          </div>
-          <div>
-            <span style="background: var(--primary); color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem; font-weight: 700;">UNREAD</span>
-          </div>
-        </div>
-        <div style="background: var(--gray-50); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-          <p style="line-height: 1.6; margin: 0;">${(msg.message||'').replace(/</g, '&lt;')}</p>
-        </div>
-        <div style="display:flex; gap:0.5rem;">
-          <button class="btn btn-primary" onclick="markRead(${msg.id}, this)"><i class="fas fa-check"></i> Mark Read</button>
-        </div>
-      `;
-
-      // Prepend newest
-      if (container.firstChild) container.insertBefore(card, container.firstChild);
-      else container.appendChild(card);
-    } catch (err) {
-      console.error('Failed to parse SSE message', err);
-    }
-  };
-
-  function markRead(id, btn) {
-    fetch('/api/chat/mark-read', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({msg_id: id})
-    }).then(r => r.json()).then(res => {
-      if (res.success) {
-        if (btn && btn.closest) {
-          const badge = btn.closest('.card').querySelector('span');
-          if (badge) badge.remove();
-        }
-      }
-    }).catch(console.error);
-  }
-}
-</script>
-
+<!-- Integration Instructions -->
 <div class="card" style="margin-top: 2rem; background: #f0f4ff; border-color: var(--primary);">
   <h3 style="margin-bottom: 1rem;"><i class="fas fa-code"></i> Integration Instructions</h3>
   <p style="line-height: 1.8; color: var(--gray-700); margin-bottom: 1rem;">
     Instances can send chat messages to: <code style="background: white; padding: 0.25rem 0.5rem; border-radius: 4px;">POST /api/chat/send</code>
+  </p>
+  <p style="font-size: 0.9rem; color: var(--gray-700); margin-bottom: 1rem;">
+    <strong>Note:</strong> Each unique email address will automatically create a separate conversation. All subsequent messages from the same email will be grouped in that conversation.
   </p>
   <pre style="background: white; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem;"><code>{
   "org_slug": "demo",
@@ -130,4 +102,89 @@ if (!!window.EventSource) {
   "message": "I need help with..."
 }</code></pre>
 </div>
+
+<script>
+// Subscribe to server-sent events for new chat messages
+if (!!window.EventSource) {
+  const evtSource = new EventSource('/api/chat/stream');
+  evtSource.onmessage = function(e) {
+    try {
+      const msg = JSON.parse(e.data);
+      // Reload page when new message arrives
+      setTimeout(() => location.reload(), 1000);
+    } catch (err) {
+      console.error('Failed to parse SSE message', err);
+    }
+  };
+
+  evtSource.onerror = function() {
+    console.error('SSE connection error');
+  };
+}
+
+function toggleConversation(element, chatId) {
+  const messagesDiv = document.getElementById('messages-' + chatId);
+  if (messagesDiv) {
+    if (messagesDiv.style.display === 'none') {
+      messagesDiv.style.display = 'block';
+      element.style.background = element.querySelector('span')?.textContent.includes('UNREAD') ? '#e3f2fd' : 'var(--gray-50)';
+    } else {
+      messagesDiv.style.display = 'none';
+      element.style.background = '';
+    }
+  }
+}
+
+function markRead(id, btn) {
+  fetch('/api/chat/mark-read', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({msg_id: id})
+  }).then(r => r.json()).then(res => {
+    if (res.success) {
+      location.reload();
+    }
+  }).catch(console.error);
+}
+</script>
+
+<style>
+.card {
+  background: white;
+  border: 1px solid var(--gray-300);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-secondary {
+  background: var(--gray-200);
+  color: var(--gray-800);
+}
+
+.btn-secondary:hover {
+  background: var(--gray-300);
+}
+</style>
 {% endblock %}

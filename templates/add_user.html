@@ -11,6 +11,7 @@
 <div style="max-width: 600px;">
   <div class="card">
     <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <div class="form-group">
         <label for="username"><i class="fas fa-user"></i> Username *</label>
         <input type="text" id="username" name="username" required placeholder="username" pattern="[a-zA-Z0-9_-]+" title="Only letters, numbers, underscores, and hyphens">

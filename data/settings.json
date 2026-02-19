@@ -1,6 +1,6 @@
 {
   "api_enabled": true,
-  "require_auth": true,
+  "require_auth": false,
   "allow_public_read": true,
   "rate_limit": 100,
   "version": "1.0.0"

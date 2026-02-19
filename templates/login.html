@@ -205,15 +205,16 @@
       {% endif %}
     {% endwith %}
 
-    <form method="POST">
+    <form method="POST" autocomplete="on">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <div class="form-group">
         <label for="username"><i class="fas fa-user"></i> Username</label>
-        <input type="text" id="username" name="username" required autofocus placeholder="Enter your username" />
+        <input type="text" id="username" name="username" required autofocus placeholder="Enter your username" autocomplete="username" />
       </div>
       
       <div class="form-group">
         <label for="password"><i class="fas fa-lock"></i> Password</label>
-        <input type="password" id="password" name="password" required placeholder="Enter your password" />
+        <input type="password" id="password" name="password" required placeholder="Enter your password" autocomplete="current-password" />
       </div>
       
       <button type="submit" class="btn">
@@ -222,8 +223,15 @@
     </form>
 
     <div class="login-footer">
-      ShowWise Backend Management System
+      <i class="fas fa-shield-alt"></i> Secure Authentication
     </div>
   </div>
+
+  <style>
+    .btn {
+      text-decoration: none;
+      display: inline-flex;
+    }
+  </style>
 </body>
 </html>
