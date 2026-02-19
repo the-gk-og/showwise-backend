@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Users - ShowWise Backend{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <h1><i class="fas fa-users"></i> User Management</h1>
+    <p>Manage admin users and access control</p>
+  </div>
+  <a href="{{ url_for('add_user') }}" class="btn btn-primary">
+    <i class="fas fa-plus"></i> Add User
+  </a>
+</div>
+
+{% if users %}
+<div class="card">
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Role</th>
+          <th>Created At</th>
+          <th>Created By</th>
+          <th style="text-align: center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for username, user in users.items() %}
+        <tr>
+          <td>
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <div style="width: 40px; height: 40px; background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 1.1rem;">
+                {{ username[0].upper() }}
+              </div>
+              <div>
+                <div style="font-weight: 700; color: var(--dark);">{{ username }}</div>
+                {% if username == session.username %}
+                <span style="font-size: 0.8rem; color: var(--primary); font-weight: 600;">(You)</span>
+                {% endif %}
+              </div>
+            </div>
+          </td>
+          <td>
+            <span style="background: var(--gray-100); color: var(--gray-700); padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.85rem; font-weight: 700; text-transform: capitalize;">
+              <i class="fas fa-shield-alt"></i> {{ user.role }}
+            </span>
+          </td>
+          <td style="font-size: 0.85rem; color: var(--gray-600);">
+            {{ user.created_at[:10] if user.get('created_at') else 'N/A' }}
+          </td>
+          <td style="font-size: 0.85rem; color: var(--gray-600);">
+            {{ user.get('created_by', 'Unknown') }}
+          </td>
+          <td>
+            <div style="display: flex; gap: 0.5rem; justify-content: center;">
+              {% if username != 'admin' and username != session.username %}
+              <a href="{{ url_for('delete_user', username=username) }}" class="btn btn-danger" style="padding: 0.5rem 1rem; font-size: 0.85rem;" onclick="return confirm('Are you sure you want to delete user \'{{ username }}\'? This action cannot be undone.');">
+                <i class="fas fa-trash"></i>
+              </a>
+              {% else %}
+              <span style="color: var(--gray-400); font-size: 0.85rem; padding: 0.5rem 1rem;">
+                <i class="fas fa-lock"></i>
+              </span>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card" style="text-align: center; padding: 4rem 2rem;">
+  <div style="width: 80px; height: 80px; background: var(--gray-100); border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 2.5rem; color: var(--gray-400);">
+    <i class="fas fa-users"></i>
+  </div>
+  <h2 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 0.75rem;">No Users Yet</h2>
+  <p style="color: var(--gray-600); margin-bottom: 2rem;">Get started by adding your first user.</p>
+  <a href="{{ url_for('add_user') }}" class="btn btn-primary">
+    <i class="fas fa-plus"></i> Add Your First User
+  </a>
+</div>
+{% endif %}
+
+<!-- Quick Actions Card -->
+<div class="card" style="margin-top: 2rem;">
+  <div class="card-header">
+    <h2><i class="fas fa-key"></i> Account Security</h2>
+    <p>Manage your password and account settings</p>
+  </div>
+  <div style="display: flex; gap: 1rem;">
+    <a href="{{ url_for('change_password') }}" class="btn btn-secondary">
+      <i class="fas fa-lock"></i> Change My Password
+    </a>
+  </div>
+</div>
+
+<!-- CLI Info Card -->
+<div class="card" style="margin-top: 2rem; background: #f0f4ff; border-color: var(--primary);">
+  <div style="display: flex; gap: 1rem;">
+    <div style="font-size: 2rem; color: var(--primary);">
+      <i class="fas fa-terminal"></i>
+    </div>
+    <div>
+      <h3 style="font-size: 1.125rem; font-weight: 800; margin-bottom: 0.5rem; color: var(--dark);">Command Line User Management</h3>
+      <p style="color: var(--gray-700); margin-bottom: 1rem;">You can also manage users from the command line:</p>
+      <div style="background: white; padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.85rem; line-height: 1.8;">
+        <div>python manage_users.py list</div>
+        <div>python manage_users.py add</div>
+        <div>python manage_users.py delete username</div>
+        <div>python manage_users.py password username</div>
+        <div>python manage_users.py reset-admin</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,74 @@
+[
+  {
+    "id": 1,
+    "timestamp": "2026-02-19T11:52:33.246063",
+    "org_slug": "SFX",
+    "from": "user",
+    "from_name": "Guest",
+    "from_email": "elijahleen10@gmail.com",
+    "message": "hi",
+    "read": true,
+    "read_at": "2026-02-19T11:52:50.492112",
+    "read_by": "admin"
+  },
+  {
+    "id": 2,
+    "timestamp": "2026-02-19T11:52:50.492073",
+    "org_slug": "SFX",
+    "from": "admin",
+    "from_name": "admin",
+    "message": "hello\r\n",
+    "reply_to": 1,
+    "read": true
+  },
+  {
+    "id": 3,
+    "timestamp": "2026-02-19T17:01:30.545779",
+    "org_slug": "SFX",
+    "from": "user",
+    "from_name": "Guest",
+    "from_email": "ajksgdkjsaghd",
+    "message": "huiya",
+    "team": null,
+    "recipients": [],
+    "read_by": "admin",
+    "read": true,
+    "read_at": "2026-02-19T17:01:53.078269"
+  },
+  {
+    "id": 4,
+    "timestamp": "2026-02-19T17:01:53.078250",
+    "org_slug": "SFX",
+    "from": "admin",
+    "from_name": "admin",
+    "message": "hello",
+    "reply_to": 3,
+    "read": true
+  },
+  {
+    "id": 5,
+    "timestamp": "2026-02-19T17:12:06.443592",
+    "org_slug": "SFX",
+    "from": "user",
+    "from_name": "admin",
+    "from_email": null,
+    "message": "hii",
+    "team": null,
+    "recipients": [],
+    "read_by": [],
+    "read": false
+  },
+  {
+    "id": 6,
+    "timestamp": "2026-02-19T17:24:26.652245",
+    "org_slug": "SFX",
+    "from": "user",
+    "from_name": "admin",
+    "from_email": null,
+    "message": "hii",
+    "team": null,
+    "recipients": [],
+    "read_by": [],
+    "read": false
+  }
+]

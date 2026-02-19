@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Add Organization - ShowWise Backend{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="fas fa-plus"></i> Add Organization</h1>
+  <p>Create a new ShowWise organization deployment</p>
+</div>
+
+<div style="max-width: 800px;">
+  <div class="card">
+    <form method="POST">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label for="slug"><i class="fas fa-key"></i> Slug (Unique Identifier) *</label>
+          <input type="text" id="slug" name="slug" required placeholder="demo" pattern="[a-z0-9-]+" title="Only lowercase letters, numbers, and hyphens">
+          <small style="color: var(--gray-600); font-size: 0.85rem; display: block; margin-top: 0.5rem;">Used as the key in the JSON file. Only lowercase letters, numbers, and hyphens.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="name"><i class="fas fa-building"></i> Organization Name *</label>
+          <input type="text" id="name" name="name" required placeholder="Demo Organization">
+        </div>
+
+        <div class="form-group">
+          <label for="subdomain"><i class="fas fa-globe"></i> Subdomain *</label>
+          <input type="text" id="subdomain" name="subdomain" required placeholder="demo">
+        </div>
+
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label for="url"><i class="fas fa-link"></i> Full URL *</label>
+          <input type="url" id="url" name="url" required placeholder="https://demo.sfx-crew.com">
+        </div>
+
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label for="logo"><i class="fas fa-image"></i> Logo URL</label>
+          <input type="url" id="logo" name="logo" placeholder="https://example.com/logo.svg">
+        </div>
+
+        <div class="form-group">
+          <label for="logo_size"><i class="fas fa-expand"></i> Logo Size</label>
+          <select id="logo_size" name="logo_size">
+            <option value="contain" selected>Contain (fit within box)</option>
+            <option value="cover">Cover (fill box)</option>
+            <option value="80%">80%</option>
+            <option value="60%">60%</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="logo_padding"><i class="fas fa-border-style"></i> Logo Padding</label>
+          <select id="logo_padding" name="logo_padding">
+            <option value="0px">None (0px)</option>
+            <option value="8px">Small (8px)</option>
+            <option value="12px" selected>Medium (12px)</option>
+            <option value="20px">Large (20px)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="primary_color"><i class="fas fa-palette"></i> Primary Color *</label>
+          <input type="text" id="primary_color" name="primary_color" value="#0051ff" placeholder="#0051ff" pattern="^#[0-9A-Fa-f]{6};?$">
+          <small style="color: var(--gray-600); font-size: 0.85rem; display: block; margin-top: 0.5rem;">Hex color code (e.g., #0051ff)</small>
+        </div>
+
+        <div class="form-group">
+          <label for="secondary_color"><i class="fas fa-palette"></i> Secondary Color</label>
+          <input type="text" id="secondary_color" name="secondary_color" value="#898989" placeholder="#898989" pattern="^#[0-9A-Fa-f]{6};?$">
+        </div>
+
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label for="description"><i class="fas fa-align-left"></i> Description *</label>
+          <textarea id="description" name="description" required placeholder="Brief description of the organization"></textarea>
+        </div>
+
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label for="website"><i class="fas fa-external-link-alt"></i> Organization Website</label>
+          <input type="url" id="website" name="website" placeholder="https://organization.com">
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 1rem; justify-content: flex-end; padding-top: 1.5rem; border-top: 1px solid var(--gray-200);">
+        <a href="{{ url_for('organizations_list') }}" class="btn btn-secondary">
+          <i class="fas fa-times"></i> Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-plus"></i> Add Organization
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Help Card -->
+  <div class="card" style="margin-top: 2rem; background: #f0f4ff; border-color: var(--primary);">
+    <div style="display: flex; gap: 1rem;">
+      <div style="font-size: 2rem; color: var(--primary);">
+        <i class="fas fa-info-circle"></i>
+      </div>
+      <div>
+        <h3 style="font-size: 1.125rem; font-weight: 800; margin-bottom: 0.5rem; color: var(--dark);">Configuration Tips</h3>
+        <ul style="color: var(--gray-700); line-height: 1.8; padding-left: 1.25rem;">
+          <li><strong>Slug:</strong> Must be unique and URL-safe. Cannot be changed later.</li>
+          <li><strong>Subdomain:</strong> Used for subdomain-based routing in your ShowWise instances.</li>
+          <li><strong>Colors:</strong> Must include the # symbol. Optional semicolon at the end.</li>
+          <li><strong>Logo:</strong> For best results, use SVG or PNG with transparent background.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

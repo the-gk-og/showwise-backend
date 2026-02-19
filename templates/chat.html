@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Live Chat - ShowWise Backend{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1><i class="fas fa-comments"></i> Live Chat Dashboard</h1>
+  <p>Customer support messages - {{ total_messages }} total, {{ unread_count }} unread</p>
+</div>
+
+<div style="display: grid; gap: 1.5rem;">
+  <div id="messages">
+  {% for msg in messages %}
+  <div class="card {% if not msg.get('read', False) %}style="border-left: 4px solid var(--primary);"{% endif %}">
+    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+      <div>
+        <div style="font-weight: 800; font-size: 1.125rem; margin-bottom: 0.25rem;">
+          {% if msg.from == 'user' %}
+          <i class="fas fa-user" style="color: var(--primary);"></i> {{ msg.from_name }}
+          {% else %}
+          <i class="fas fa-user-shield" style="color: var(--success);"></i> {{ msg.from_name }} (Admin)
+          {% endif %}
+        </div>
+        <div style="font-size: 0.85rem; color: var(--gray-600);">
+          {{ msg.org_slug }} • {{ msg.timestamp[:19] }}
+          {% if msg.from_email %} • {{ msg.from_email }}{% endif %}
+        </div>
+      </div>
+      <div>
+        {% if not msg.get('read', False) and msg.from == 'user' %}
+        <span style="background: var(--primary); color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem; font-weight: 700;">UNREAD</span>
+        {% endif %}
+      </div>
+    </div>
+    <div style="background: var(--gray-50); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+      <p style="line-height: 1.6; margin: 0;">{{ msg.message }}</p>
+    </div>
+    {% if msg.from == 'user' and not msg.get('read', False) %}
+    <form method="POST" action="{{ url_for('reply_chat', msg_id=msg.id) }}" style="display: grid; gap: 1rem;">
+      <textarea name="reply" required placeholder="Type your reply..." style="min-height: 80px;"></textarea>
+      <div style="display: flex; gap: 0.5rem;">
+        <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Send Reply</button>
+        <a href="{{ url_for('mark_chat_read', msg_id=msg.id) }}" class="btn btn-secondary"><i class="fas fa-check"></i> Mark Read</a>
+      </div>
+    </form>
+    {% elif msg.get('reply_to') %}
+    <div style="padding: 0.5rem 0; color: var(--gray-600); font-size: 0.85rem;">
+      <i class="fas fa-reply"></i> Reply to message #{{ msg.reply_to }}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  </div>
+</div>
+
+{% if not messages %}
+<div class="card" style="text-align: center; padding: 4rem 2rem;">
+  <div style="font-size: 3rem; color: var(--gray-400); margin-bottom: 1rem;"><i class="fas fa-comments"></i></div>
+  <h2>No Messages Yet</h2>
+  <p style="color: var(--gray-600);">Chat messages from instances will appear here</p>
+</div>
+{% endif %}
+
+<script>
+// Subscribe to server-sent events for new chat messages
+if (!!window.EventSource) {
+  const evtSource = new EventSource('/api/chat/stream');
+  evtSource.onmessage = function(e) {
+    try {
+      const msg = JSON.parse(e.data);
+      const container = document.getElementById('messages');
+      if (!container) return;
+
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+          <div>
+            <div style="font-weight: 800; font-size: 1.125rem; margin-bottom: 0.25rem;">
+              <i class="fas fa-user" style="color: var(--primary);"></i> ${msg.from_name}
+            </div>
+            <div style="font-size: 0.85rem; color: var(--gray-600);">
+              ${msg.org_slug} • ${msg.timestamp.slice(0,19)} ${msg.from_email ? ' • ' + msg.from_email : ''}
+            </div>
+          </div>
+          <div>
+            <span style="background: var(--primary); color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem; font-weight: 700;">UNREAD</span>
+          </div>
+        </div>
+        <div style="background: var(--gray-50); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+          <p style="line-height: 1.6; margin: 0;">${(msg.message||'').replace(/</g, '&lt;')}</p>
+        </div>
+        <div style="display:flex; gap:0.5rem;">
+          <button class="btn btn-primary" onclick="markRead(${msg.id}, this)"><i class="fas fa-check"></i> Mark Read</button>
+        </div>
+      `;
+
+      // Prepend newest
+      if (container.firstChild) container.insertBefore(card, container.firstChild);
+      else container.appendChild(card);
+    } catch (err) {
+      console.error('Failed to parse SSE message', err);
+    }
+  };
+
+  function markRead(id, btn) {
+    fetch('/api/chat/mark-read', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({msg_id: id})
+    }).then(r => r.json()).then(res => {
+      if (res.success) {
+        if (btn && btn.closest) {
+          const badge = btn.closest('.card').querySelector('span');
+          if (badge) badge.remove();
+        }
+      }
+    }).catch(console.error);
+  }
+}
+</script>
+
+<div class="card" style="margin-top: 2rem; background: #f0f4ff; border-color: var(--primary);">
+  <h3 style="margin-bottom: 1rem;"><i class="fas fa-code"></i> Integration Instructions</h3>
+  <p style="line-height: 1.8; color: var(--gray-700); margin-bottom: 1rem;">
+    Instances can send chat messages to: <code style="background: white; padding: 0.25rem 0.5rem; border-radius: 4px;">POST /api/chat/send</code>
+  </p>
+  <pre style="background: white; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem;"><code>{
+  "org_slug": "demo",
+  "user_name": "John Doe",
+  "user_email": "john@example.com",
+  "message": "I need help with..."
+}</code></pre>
+</div>
+{% endblock %}

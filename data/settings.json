@@ -1,0 +1,7 @@
+{
+  "api_enabled": true,
+  "require_auth": true,
+  "allow_public_read": true,
+  "rate_limit": 100,
+  "version": "1.0.0"
+}

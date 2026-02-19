@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - ShowWise Backend{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="fas fa-cog"></i> API Settings</h1>
+  <p>Configure backend service and API behavior</p>
+</div>
+
+<div style="max-width: 900px;">
+  <div class="card">
+    <div class="card-header">
+      <h2><i class="fas fa-toggle-on"></i> API Configuration</h2>
+      <p>Control API access and behavior</p>
+    </div>
+
+    <form method="POST">
+      <div style="display: grid; gap: 2rem;">
+        <!-- API Enable/Disable -->
+        <div style="padding: 1.5rem; background: var(--gray-50); border-radius: 12px; border: 2px solid var(--gray-200);">
+          <div style="display: flex; align-items: start; gap: 1rem;">
+            <input type="checkbox" id="api_enabled" name="api_enabled" {% if settings.api_enabled %}checked{% endif %} style="width: 20px; height: 20px; cursor: pointer; margin-top: 0.25rem;">
+            <div style="flex: 1;">
+              <label for="api_enabled" style="font-size: 1.125rem; cursor: pointer; margin-bottom: 0.5rem;">
+                <i class="fas fa-plug"></i> Enable API
+              </label>
+              <p style="color: var(--gray-600); font-size: 0.9rem; line-height: 1.6; margin: 0;">
+                When disabled, all API endpoints will return a 503 error. This is useful for maintenance or when you want to temporarily disable external access.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Authentication -->
+        <div style="padding: 1.5rem; background: var(--gray-50); border-radius: 12px; border: 2px solid var(--gray-200);">
+          <div style="display: flex; align-items: start; gap: 1rem;">
+            <input type="checkbox" id="require_auth" name="require_auth" {% if settings.require_auth %}checked{% endif %} style="width: 20px; height: 20px; cursor: pointer; margin-top: 0.25rem;">
+            <div style="flex: 1;">
+              <label for="require_auth" style="font-size: 1.125rem; cursor: pointer; margin-bottom: 0.5rem;">
+                <i class="fas fa-lock"></i> Require Authentication
+              </label>
+              <p style="color: var(--gray-600); font-size: 0.9rem; line-height: 1.6; margin: 0;">
+                When enabled, API requests will require authentication tokens. Currently not implemented - this is a placeholder for future authentication features.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Public Read Access -->
+        <div style="padding: 1.5rem; background: var(--gray-50); border-radius: 12px; border: 2px solid var(--gray-200);">
+          <div style="display: flex; align-items: start; gap: 1rem;">
+            <input type="checkbox" id="allow_public_read" name="allow_public_read" {% if settings.allow_public_read %}checked{% endif %} style="width: 20px; height: 20px; cursor: pointer; margin-top: 0.25rem;">
+            <div style="flex: 1;">
+              <label for="allow_public_read" style="font-size: 1.125rem; cursor: pointer; margin-bottom: 0.5rem;">
+                <i class="fas fa-eye"></i> Allow Public Read Access
+              </label>
+              <p style="color: var(--gray-600); font-size: 0.9rem; line-height: 1.6; margin: 0;">
+                When disabled, only active organizations will be returned by the API. Inactive organizations will be hidden from public view.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rate Limiting -->
+        <div style="padding: 1.5rem; background: var(--gray-50); border-radius: 12px; border: 2px solid var(--gray-200);">
+          <label for="rate_limit" style="font-size: 1.125rem; margin-bottom: 1rem; display: block;">
+            <i class="fas fa-tachometer-alt"></i> Rate Limit (requests/hour)
+          </label>
+          <input type="number" id="rate_limit" name="rate_limit" value="{{ settings.rate_limit }}" min="1" max="10000" style="max-width: 200px;">
+          <p style="color: var(--gray-600); font-size: 0.9rem; line-height: 1.6; margin-top: 0.75rem;">
+            Maximum number of API requests per hour from a single IP address. Currently not enforced - placeholder for future implementation.
+          </p>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 1rem; justify-content: flex-end; padding-top: 2rem; border-top: 1px solid var(--gray-200); margin-top: 2rem;">
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-save"></i> Save Settings
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- API Documentation Card -->
+  <div class="card" style="margin-top: 2rem;">
+    <div class="card-header">
+      <h2><i class="fas fa-book"></i> API Documentation</h2>
+      <p>How to use the ShowWise Backend API</p>
+    </div>
+
+    <div style="margin-bottom: 2rem;">
+      <h3 style="font-size: 1.125rem; font-weight: 800; margin-bottom: 1rem; color: var(--dark);">Available Endpoints</h3>
+      
+      <div style="margin-bottom: 1.5rem;">
+        <div style="background: var(--gray-50); padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.9rem; margin-bottom: 0.5rem;">
+          <strong style="color: var(--success);">GET</strong> /api/health
+        </div>
+        <p style="color: var(--gray-600); font-size: 0.9rem; line-height: 1.6;">Health check endpoint. Returns service status and version.</p>
+      </div>
+
+      <div style="margin-bottom: 1.5rem;">
+        <div style="background: var(--gray-50); padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.9rem; margin-bottom: 0.5rem;">
+          <strong style="color: var(--success);">GET</strong> /api/organizations
+        </div>
+        <p style="color: var(--gray-600); font-size: 0.9rem; line-height: 1.6;">Returns all organizations with their complete configuration.</p>
+      </div>
+
+      <div style="margin-bottom: 1.5rem;">
+        <div style="background: var(--gray-50); padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.9rem; margin-bottom: 0.5rem;">
+          <strong style="color: var(--success);">GET</strong> /api/organizations/{slug}
+        </div>
+        <p style="color: var(--gray-600); font-size: 0.9rem; line-height: 1.6;">Returns a specific organization by its slug identifier.</p>
+      </div>
+
+      <div style="margin-bottom: 1.5rem;">
+        <div style="background: var(--gray-50); padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.9rem; margin-bottom: 0.5rem;">
+          <strong style="color: var(--success);">GET</strong> /api/organizations/by-subdomain/{subdomain}
+        </div>
+        <p style="color: var(--gray-600); font-size: 0.9rem; line-height: 1.6;">Finds an organization by its subdomain. Useful for subdomain-based routing.</p>
+      </div>
+
+      <div>
+        <div style="background: var(--gray-50); padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.9rem; margin-bottom: 0.5rem;">
+          <strong style="color: var(--success);">GET</strong> /api/stats
+        </div>
+        <p style="color: var(--gray-600); font-size: 0.9rem; line-height: 1.6;">Returns statistics about organizations and API usage.</p>
+      </div>
+    </div>
+
+    <div style="background: #f0f4ff; padding: 1.5rem; border-radius: 12px; border: 2px solid var(--primary);">
+      <h3 style="font-size: 1.125rem; font-weight: 800; margin-bottom: 1rem; color: var(--dark);">
+        <i class="fas fa-code"></i> Example Usage
+      </h3>
+      <pre style="background: white; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; line-height: 1.6;"><code>// Fetch all organizations
+fetch('http://your-backend-url/api/organizations')
+  .then(res => res.json())
+  .then(data => console.log(data));
+
+// Get specific organization
+fetch('http://your-backend-url/api/organizations/demo')
+  .then(res => res.json())
+  .then(data => console.log(data));</code></pre>
+    </div>
+  </div>
+</div>
+{% endblock %}

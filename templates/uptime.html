@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Uptime Dashboard - ShowWise Backend{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1><i class="fas fa-heartbeat"></i> Uptime Dashboard</h1>
+  <p>Monitor instance health and availability</p>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
+  {% for slug, org in organizations.items() %}
+  <div class="card">
+    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+      {% if org.logo %}
+      <img src="{{ org.logo }}" alt="{{ org.name }}" style="width: 50px; height: 50px; object-fit: contain; border-radius: 8px;">
+      {% else %}
+      <div style="width: 50px; height: 50px; background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 1.5rem;">
+        {{ org.name[0] }}
+      </div>
+      {% endif %}
+      <div style="flex: 1;">
+        <h3 style="font-size: 1.125rem; font-weight: 800; margin-bottom: 0.25rem;">{{ org.name }}</h3>
+        <div style="font-size: 0.85rem; color: var(--gray-600);">{{ slug }}</div>
+      </div>
+      <div>
+        {% if stats[slug].status == 'online' %}
+        <div style="width: 12px; height: 12px; background: var(--success); border-radius: 50%; box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);"></div>
+        {% elif stats[slug].status == 'offline' %}
+        <div style="width: 12px; height: 12px; background: var(--danger); border-radius: 50%; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);"></div>
+        {% else %}
+        <div style="width: 12px; height: 12px; background: var(--gray-400); border-radius: 50%;"></div>
+        {% endif %}
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+      <div>
+        <div style="font-size: 0.75rem; color: var(--gray-600); font-weight: 600; text-transform: uppercase; margin-bottom: 0.25rem;">Status</div>
+        <div style="font-size: 1rem; font-weight: 800; color: {% if stats[slug].status == 'online' %}var(--success){% elif stats[slug].status == 'offline' %}var(--danger){% else %}var(--gray-600){% endif %}; text-transform: capitalize;">{{ stats[slug].status }}</div>
+      </div>
+      <div>
+        <div style="font-size: 0.75rem; color: var(--gray-600); font-weight: 600; text-transform: uppercase; margin-bottom: 0.25rem;">Uptime 24h</div>
+        <div style="font-size: 1rem; font-weight: 800;">{{ "%.1f"|format(stats[slug].uptime_24h) }}%</div>
+      </div>
+      <div>
+        <div style="font-size: 0.75rem; color: var(--gray-600); font-weight: 600; text-transform: uppercase; margin-bottom: 0.25rem;">Total Pings</div>
+        <div style="font-size: 1rem; font-weight: 800;">{{ stats[slug].total_pings }}</div>
+      </div>
+      <div>
+        <div style="font-size: 0.75rem; color: var(--gray-600); font-weight: 600; text-transform: uppercase; margin-bottom: 0.25rem;">Last Ping</div>
+        <div style="font-size: 0.85rem; font-weight: 600;">{{ stats[slug].last_ping[:16] if stats[slug].last_ping else 'Never' }}</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card" style="margin-top: 2rem; background: #f0f4ff; border-color: var(--primary);">
+  <h3 style="margin-bottom: 1rem;"><i class="fas fa-info-circle"></i> How Uptime Tracking Works</h3>
+  <p style="line-height: 1.8; color: var(--gray-700);">
+    Instances should send heartbeat pings to <code style="background: white; padding: 0.25rem 0.5rem; border-radius: 4px;">POST /api/uptime/ping</code> every 5 minutes.
+    Status is "online" if a ping was received in the last 5 minutes, otherwise "offline".
+  </p>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{
+  "SFX": {
+  "name": "SFX",
+  "subdomain": "sfx",
+  "url": "https://sfx.sfx-crew.com",
+  "logo": "https://www.sfx.act.edu.au/media/logo.svg",
+  "logo_size": "contain",
+  "logo_padding": "0px",
+  "primary_color": "#1f2937;",
+  "secondary_color": "#898989;",
+  "description": "SFXC crew management",
+  "website": "https://sfx.act.edu.au"
+
+  },
+  "demo": {
+    "name": "Demo",
+    "subdomain": "demo",
+    "url": "https://demo.sfx-crew.com",
+    "logo": "/static/logos/demo.png",
+    "logo_size": "contain",
+    "logo_padding": "12px",
+    "primary_color": "#0051ff",
+    "description": "Demo organization for testing and exploration"
+  },
+
+  "Dev": {
+  "name": "Development (RED - Server)",
+  "subdomain": "red",
+  "url": "https://red.sfx-crew.com",
+  "logo": "",
+  "logo_size": "contain",
+  "logo_padding": "0px",
+  "primary_color": "#1f2937;",
+  "secondary_color": "#898989;",
+  "description": "ShowWise Development Instance",
+  "website": "https://sfx-crew.com"
+
+  }
+
+}
+
