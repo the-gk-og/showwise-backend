@@ -1,45 +1,58 @@
 {% extends "base.html" %}
-
 {% block title %}Add User - ShowWise Backend{% endblock %}
-
 {% block content %}
 <div class="page-header">
   <h1><i class="fas fa-user-plus"></i> Add User</h1>
   <p>Create a new admin user account</p>
 </div>
 
-<div style="max-width: 600px;">
+<div style="max-width:600px;">
   <div class="card">
-    <form method="POST">
+    <form method="POST" action="{{ url_for('add_user') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
       <div class="form-group">
         <label for="username"><i class="fas fa-user"></i> Username *</label>
-        <input type="text" id="username" name="username" required placeholder="username" pattern="[a-zA-Z0-9_-]+" title="Only letters, numbers, underscores, and hyphens">
-        <small style="color: var(--gray-600); font-size: 0.85rem; display: block; margin-top: 0.5rem;">Only letters, numbers, underscores, and hyphens allowed</small>
+        <input type="text" id="username" name="username" required placeholder="username"
+               pattern="[a-zA-Z0-9_-]+" title="Letters, numbers, underscores, hyphens only">
+        <small style="color:var(--gray-600);font-size:0.85rem;display:block;margin-top:0.5rem;">
+          Letters, numbers, underscores, and hyphens only
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="email"><i class="fas fa-envelope"></i> Email</label>
+        <input type="email" id="email" name="email" placeholder="user@example.com">
+        <small style="color:var(--gray-600);font-size:0.85rem;display:block;margin-top:0.5rem;">
+          Optional — defaults to username@showwise.local
+        </small>
       </div>
 
       <div class="form-group">
         <label for="password"><i class="fas fa-lock"></i> Password *</label>
-        <input type="password" id="password" name="password" required placeholder="Enter a strong password" minlength="6">
-        <small style="color: var(--gray-600); font-size: 0.85rem; display: block; margin-top: 0.5rem;">Minimum 6 characters</small>
+        <input type="password" id="password" name="password" required
+               placeholder="Min. 12 characters" minlength="12">
+        <small style="color:var(--gray-600);font-size:0.85rem;display:block;margin-top:0.5rem;">
+          Minimum 12 characters
+        </small>
       </div>
 
       <div class="form-group">
         <label for="password_confirm"><i class="fas fa-lock"></i> Confirm Password *</label>
-        <input type="password" id="password_confirm" name="password_confirm" required placeholder="Re-enter password" minlength="6">
+        <input type="password" id="password_confirm" name="password_confirm" required
+               placeholder="Re-enter password" minlength="12">
       </div>
 
       <div class="form-group">
         <label for="role"><i class="fas fa-shield-alt"></i> Role</label>
         <select id="role" name="role">
           <option value="admin" selected>Admin</option>
-          <option value="moderator">Moderator</option>
-          <option value="viewer">Viewer</option>
+          <option value="operator">Operator</option>
+          <option value="user">User</option>
         </select>
-        <small style="color: var(--gray-600); font-size: 0.85rem; display: block; margin-top: 0.5rem;">Currently all roles have the same permissions. Role system coming soon.</small>
       </div>
 
-      <div style="display: flex; gap: 1rem; justify-content: flex-end; padding-top: 1.5rem; border-top: 1px solid var(--gray-200);">
+      <div style="display:flex;gap:1rem;justify-content:flex-end;padding-top:1.5rem;border-top:1px solid var(--gray-200);">
         <a href="{{ url_for('users_list') }}" class="btn btn-secondary">
           <i class="fas fa-times"></i> Cancel
         </a>
@@ -49,42 +62,15 @@
       </div>
     </form>
   </div>
-
-  <!-- Security Notice -->
-  <div class="card" style="margin-top: 2rem; background: #fff7ed; border-color: var(--warning);">
-    <div style="display: flex; gap: 1rem;">
-      <div style="font-size: 2rem; color: var(--warning);">
-        <i class="fas fa-exclamation-triangle"></i>
-      </div>
-      <div>
-        <h3 style="font-size: 1.125rem; font-weight: 800; margin-bottom: 0.5rem; color: var(--dark);">Security Notice</h3>
-        <ul style="color: var(--gray-700); line-height: 1.8; padding-left: 1.25rem;">
-          <li>Passwords are currently stored in plain text</li>
-          <li>Use a unique password not used elsewhere</li>
-          <li>Share credentials securely</li>
-          <li>Consider implementing password hashing for production</li>
-        </ul>
-      </div>
-    </div>
-  </div>
 </div>
 
 <script>
-// Client-side password validation
 document.querySelector('form').addEventListener('submit', function(e) {
-  const password = document.getElementById('password').value;
-  const confirm = document.getElementById('password_confirm').value;
-  
-  if (password !== confirm) {
+  const pw = document.getElementById('password').value;
+  const cf = document.getElementById('password_confirm').value;
+  if (pw !== cf) {
     e.preventDefault();
     alert('Passwords do not match!');
-    return false;
-  }
-  
-  if (password.length < 6) {
-    e.preventDefault();
-    alert('Password must be at least 6 characters long!');
-    return false;
   }
 });
 </script>
