@@ -30,6 +30,24 @@
   </form>
 </div>
 
+<div class="card" style="margin-bottom: 2rem;">
+  <div class="card-header">
+    <h2><i class="fas fa-rocket"></i> Quick: Generate Home Page Key</h2>
+  </div>
+  <div style="padding: 1rem;">
+    <p style="color: var(--gray-600); margin-top: 0;">Quickly generate a key labelled <strong>home-page</strong> for a specific instance. This is useful for the website home page to fetch <em>organizations</em> data.</p>
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+      {% for slug, org in organizations.items() %}
+      <form method="POST" action="{{ url_for('generate_api_key') }}" style="display: inline-block;">
+        <input type="hidden" name="org_slug" value="{{ slug }}">
+        <input type="hidden" name="name" value="home-page">
+        <button type="submit" class="btn btn-outline" style="margin: 0.25rem;">Generate for {{ org.name }}</button>
+      </form>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
 {% if api_keys %}
 <div class="card">
   <div class="table-container">
