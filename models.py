@@ -1,5 +1,5 @@
 """
-Database models for ShowWise Backend
+Database models for ShowWise Backend (Lite)
 Implements secure authentication with password hashing and TOTP support
 """
 from flask_sqlalchemy import SQLAlchemy
@@ -38,11 +38,6 @@ class User(db.Model):
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    organizations = db.relationship('Organization', secondary='user_organization', backref='users')
-    api_keys = db.relationship('APIKey', backref='user', lazy=True, cascade='all, delete-orphan')
-    logs = db.relationship('Log', backref='user', lazy=True, cascade='all, delete-orphan')
-    chat_messages = db.relationship('ChatMessage', backref='user', lazy=True, cascade='all, delete-orphan')
 
     def set_password(self, password):
         if len(password) < 12:
@@ -117,7 +112,7 @@ class Organization(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     slug = db.Column(db.String(80), unique=True, nullable=False, index=True)
-    subdomain = db.Column(db.String(120), index=True)  # Not globally unique – can be NULL
+    subdomain = db.Column(db.String(120), index=True)
     url = db.Column(db.String(255))
     logo = db.Column(db.String(255))
     logo_size = db.Column(db.String(50), default='contain')
@@ -131,12 +126,6 @@ class Organization(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    api_keys = db.relationship('APIKey', backref='organization', lazy=True, cascade='all, delete-orphan')
-    chat_messages = db.relationship('ChatMessage', backref='organization', lazy=True, cascade='all, delete-orphan')
-    logs = db.relationship('Log', backref='organization', lazy=True, cascade='all, delete-orphan')
-    settings = db.relationship('Setting', backref='organization', lazy=True, cascade='all, delete-orphan',
-                                foreign_keys='Setting.organization_id')
-    uptime_records = db.relationship('UptimeRecord', backref='organization', lazy=True, cascade='all, delete-orphan')
     kill_switches = db.relationship('KillSwitch', backref='organization', lazy=True, cascade='all, delete-orphan')
 
     def to_dict(self):
@@ -159,154 +148,6 @@ class Organization(db.Model):
         }
 
 
-class APIKey(db.Model):
-    """API Key model for service authentication"""
-    __tablename__ = 'api_keys'
-
-    id = db.Column(db.Integer, primary_key=True)
-    key = db.Column(db.String(255), unique=True, nullable=False, index=True)
-    secret_hash = db.Column(db.String(255), nullable=False)
-    name = db.Column(db.String(120))
-
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
-    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=False, index=True)
-
-    scopes = db.Column(db.JSON)
-    is_active = db.Column(db.Boolean, default=True, index=True)
-
-    last_used = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-    expires_at = db.Column(db.DateTime)
-
-    def set_secret(self, secret):
-        self.secret_hash = generate_password_hash(secret, method='pbkdf2:sha256', salt_length=16)
-
-    def check_secret(self, secret):
-        return check_password_hash(self.secret_hash, secret)
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'name': self.name,
-            'key': self.key[:8] + '...' if len(self.key) > 8 else self.key,
-            'scopes': self.scopes,
-            'is_active': self.is_active,
-            'last_used': self.last_used.isoformat() if self.last_used else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
-            'organization_id': self.organization_id,
-        }
-
-
-class ChatMessage(db.Model):
-    """Chat message model"""
-    __tablename__ = 'chat_messages'
-
-    id = db.Column(db.Integer, primary_key=True)
-    chat_id = db.Column(db.String(16), nullable=False, index=True)
-
-    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=False, index=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-
-    from_type = db.Column(db.String(20))  # 'user' | 'admin'
-    from_name = db.Column(db.String(120))
-    from_email = db.Column(db.String(120), index=True)
-
-    message = db.Column(db.Text, nullable=False)
-
-    is_read = db.Column(db.Boolean, default=False, index=True)
-    read_by = db.Column(db.String(120))
-    read_at = db.Column(db.DateTime)
-
-    reply_to = db.Column(db.Integer, db.ForeignKey('chat_messages.id'), nullable=True)
-
-    team = db.Column(db.String(120))
-    recipients = db.Column(db.JSON)
-
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'chat_id': self.chat_id,
-            'from': self.from_type,
-            'from_name': self.from_name,
-            'from_email': self.from_email,
-            'message': self.message,
-            'org_slug': self.organization.slug if self.organization else None,
-            'read': self.is_read,
-            'read_by': self.read_by,
-            'read_at': self.read_at.isoformat() if self.read_at else None,
-            'reply_to': self.reply_to,
-            'timestamp': self.created_at.isoformat() if self.created_at else None,
-            'team': self.team,
-            'recipients': self.recipients or [],
-        }
-
-
-class Log(db.Model):
-    """Audit log model"""
-    __tablename__ = 'logs'
-
-    id = db.Column(db.Integer, primary_key=True)
-    log_type = db.Column(db.String(50), nullable=False, index=True)
-    level = db.Column(db.String(20), default='info')
-
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
-    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=True, index=True)
-
-    message = db.Column(db.Text, nullable=False)
-    ip_address = db.Column(db.String(45), index=True)
-    user_agent = db.Column(db.String(255))
-
-    event_metadata = db.Column(db.JSON)
-
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'type': self.log_type,
-            'level': self.level,
-            'message': self.message,
-            'ip_address': self.ip_address,
-            'user_agent': self.user_agent,
-            'event_metadata': self.event_metadata,
-            'timestamp': self.created_at.isoformat() if self.created_at else None,
-        }
-
-
-class Setting(db.Model):
-    """Application settings — per-organization or global (organization_id=NULL)"""
-    __tablename__ = 'settings'
-
-    id = db.Column(db.Integer, primary_key=True)
-    # NULL = global setting
-    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=True, index=True)
-    key = db.Column(db.String(120), nullable=False)
-    value = db.Column(db.Text)
-
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # No unique constraint at ORM level because SQLite doesn't treat NULL = NULL,
-    # so we handle uniqueness in application code via raw SQL.
-
-
-class UptimeRecord(db.Model):
-    """Uptime monitoring records"""
-    __tablename__ = 'uptime_records'
-
-    id = db.Column(db.Integer, primary_key=True)
-    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=False, index=True)
-
-    status = db.Column(db.String(20))  # 'up' | 'down' | 'degraded'
-    response_time = db.Column(db.Float)  # milliseconds
-
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-
-
 class KillSwitch(db.Model):
     """Kill switch for organizations"""
     __tablename__ = 'kill_switches'
@@ -326,10 +167,15 @@ class KillSwitch(db.Model):
 
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-
-# Association table
-user_organization = db.Table(
-    'user_organization',
-    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
-    db.Column('organization_id', db.Integer, db.ForeignKey('organizations.id'), primary_key=True),
-)
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'organization_id': self.organization_id,
+            'is_enabled': self.is_enabled,
+            'reason': self.reason,
+            'enabled_at': self.enabled_at.isoformat() if self.enabled_at else None,
+            'enabled_by': self.enabled_by,
+            'disabled_at': self.disabled_at.isoformat() if self.disabled_at else None,
+            'disabled_by': self.disabled_by,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
