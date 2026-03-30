@@ -1,2 +1,4 @@
 .env
 instance/*.db
+/_pycache_
+/.vscode

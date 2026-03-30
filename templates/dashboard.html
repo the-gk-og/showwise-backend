@@ -1,129 +1,1183 @@
-{% extends "base.html" %}
-{% block title %}Dashboard - ShowWise Backend{% endblock %}
-{% block content %}
-<div class="page-header">
-  <h1><i class="fas fa-chart-line"></i> Instance Management Dashboard</h1>
-  <p>Welcome back, {{ username }}! Comprehensive overview of your ShowWise deployment.</p>
-</div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShowWise Security Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-<!-- Stats Grid -->
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 3rem;">
-  <div class="card" style="border-left: 4px solid var(--primary);">
-    <div style="display: flex; align-items: center; gap: 1rem;">
-      <div style="width:60px;height:60px;background:linear-gradient(135deg,var(--primary) 0%,var(--accent) 100%);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.75rem;color:white;">
-        <i class="fas fa-building"></i>
-      </div>
-      <div>
-        <div style="font-size:0.85rem;color:var(--gray-600);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Total Instances</div>
-        <div style="font-size:2rem;font-weight:900;color:var(--dark);line-height:1;">{{ stats.total_organizations }}</div>
-      </div>
-    </div>
-  </div>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
 
-  <div class="card" style="border-left: 4px solid var(--success);">
-    <div style="display: flex; align-items: center; gap: 1rem;">
-      <div style="width:60px;height:60px;background:var(--success);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.75rem;color:white;">
-        <i class="fas fa-check-circle"></i>
-      </div>
-      <div>
-        <div style="font-size:0.85rem;color:var(--gray-600);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Active</div>
-        <div style="font-size:2rem;font-weight:900;color:var(--dark);line-height:1;">{{ stats.active_organizations }}</div>
-      </div>
-    </div>
-  </div>
+        .dashboard-container {
+            display: flex;
+            min-height: 100vh;
+        }
 
-  <div class="card" style="border-left: 4px solid var(--warning);">
-    <div style="display: flex; align-items: center; gap: 1rem;">
-      <div style="width:60px;height:60px;background:var(--warning);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.75rem;color:white;">
-        <i class="fas fa-pause-circle"></i>
-      </div>
-      <div>
-        <div style="font-size:0.85rem;color:var(--gray-600);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Inactive</div>
-        <div style="font-size:2rem;font-weight:900;color:var(--dark);line-height:1;">{{ stats.inactive_organizations }}</div>
-      </div>
-    </div>
-  </div>
+        /* SIDEBAR */
+        .sidebar {
+            width: 260px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            padding: 20px 0;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+            box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+        }
 
-  <div class="card" style="border-left: 4px solid var(--accent);">
-    <div style="display: flex; align-items: center; gap: 1rem;">
-      <div style="width:60px;height:60px;background:var(--accent);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.75rem;color:white;">
-        <i class="fas fa-plug"></i>
-      </div>
-      <div>
-        <div style="font-size:0.85rem;color:var(--gray-600);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">API Status</div>
-        <div style="font-size:1.5rem;font-weight:900;color:var(--dark);line-height:1;">{{ stats.api_status }}</div>
-      </div>
-    </div>
-  </div>
-</div>
+        .sidebar-header {
+            padding: 0 20px 30px;
+            border-bottom: 1px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
 
-<!-- Quick Actions -->
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-bottom: 3rem;">
-  <div class="card">
-    <div class="card-header">
-      <h2><i class="fas fa-rocket"></i> Quick Actions</h2>
-      <p>Common tasks and shortcuts</p>
-    </div>
-    <div style="display: flex; flex-direction: column; gap: 1rem;">
-      <a href="{{ url_for('add_organization') }}" class="btn btn-primary">
-        <i class="fas fa-plus"></i> Add New Instance
-      </a>
-      <a href="{{ url_for('organizations_list') }}" class="btn btn-secondary">
-        <i class="fas fa-building"></i> View All Instances
-      </a>
-      <a href="{{ url_for('logs_list') }}" class="btn btn-secondary">
-        <i class="fas fa-clipboard-list"></i> View Logs
-      </a>
-    </div>
-  </div>
+        .sidebar-header h2 {
+            font-size: 18px;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
 
-  <div class="card">
-    <div class="card-header">
-      <h2><i class="fas fa-chart-area"></i> Instance Monitoring</h2>
-      <p>Track health and performance</p>
-    </div>
-    <div style="display: flex; flex-direction: column; gap: 1rem;">
-      <a href="{{ url_for('uptime_dashboard') }}" class="btn btn-secondary">
-        <i class="fas fa-heartbeat"></i> Uptime Dashboard
-      </a>
-      <a href="{{ url_for('api_keys_list') }}" class="btn btn-secondary">
-        <i class="fas fa-key"></i> API Keys
-      </a>
-      <a href="{{ url_for('kill_switches_list') }}" class="btn btn-secondary">
-        <i class="fas fa-power-off"></i> Kill Switches
-      </a>
-    </div>
-  </div>
+        .sidebar-header p {
+            font-size: 12px;
+            color: #999;
+        }
 
-  <div class="card">
-    <div class="card-header">
-      <h2><i class="fas fa-comments"></i> Support</h2>
-      <p>Customer communications</p>
-    </div>
-    <div style="display: flex; flex-direction: column; gap: 1rem;">
-      <a href="{{ url_for('chat_dashboard') }}" class="btn btn-secondary">
-        <i class="fas fa-comment-dots"></i> Live Chat
-      </a>
-      <a href="{{ url_for('settings') }}" class="btn btn-secondary">
-        <i class="fas fa-cog"></i> Settings
-      </a>
-    </div>
-  </div>
-</div>
+        .nav-items {
+            list-style: none;
+        }
 
-<!-- API Endpoints Reference -->
-<div class="card">
-  <div class="card-header">
-    <h2><i class="fas fa-code"></i> API Endpoints</h2>
-    <p>Instance integration endpoints</p>
-  </div>
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; font-size: 0.9rem; color: var(--gray-700);">
-    <div style="padding:0.75rem;background:var(--gray-50);border-radius:6px;font-family:monospace;"><strong>GET</strong> /api/organizations</div>
-    <div style="padding:0.75rem;background:var(--gray-50);border-radius:6px;font-family:monospace;"><strong>POST</strong> /api/uptime/ping</div>
-    <div style="padding:0.75rem;background:var(--gray-50);border-radius:6px;font-family:monospace;"><strong>GET</strong> /api/kill-switch/{slug}</div>
-    <div style="padding:0.75rem;background:var(--gray-50);border-radius:6px;font-family:monospace;"><strong>POST</strong> /api/chat/send</div>
-    <div style="padding:0.75rem;background:var(--gray-50);border-radius:6px;font-family:monospace;"><strong>POST</strong> /api/log</div>
-    <div style="padding:0.75rem;background:var(--gray-50);border-radius:6px;font-family:monospace;"><strong>GET</strong> /api/health</div>
-  </div>
-</div>
-{% endblock %}
+        .nav-item {
+            margin: 5px 10px;
+            border-radius: 6px;
+        }
+
+        .nav-item a {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            color: #666;
+            text-decoration: none;
+            font-size: 14px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .nav-item a:hover {
+            background: #f0f0f0;
+            color: #667eea;
+        }
+
+        .nav-item a.active {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+
+        .nav-item .icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 12px;
+        }
+
+        /* MAIN CONTENT */
+        .main-content {
+            margin-left: 260px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .topbar {
+            background: white;
+            padding: 20px 30px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .topbar h1 {
+            font-size: 24px;
+            color: #333;
+        }
+
+        .content-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 30px;
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        /* CARDS & LAYOUT */
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-header h2 {
+            font-size: 18px;
+            margin: 0;
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .stat-card h3 {
+            font-size: 12px;
+            opacity: 0.9;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: bold;
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .btn-danger {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #ff5252;
+        }
+
+        .btn-warning {
+            background: #ffa500;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #ff8c00;
+        }
+
+        .btn-success {
+            background: #51cf66;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #40c057;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        table th {
+            background: #f9f9f9;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        table tr:hover {
+            background: #f9f9f9;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-success { background: #d4edda; color: #155724; }
+        .badge-warning { background: #fff3cd; color: #856404; }
+        .badge-danger { background: #f8d7da; color: #721c24; }
+        .badge-info { background: #d1ecf1; color: #0c5460; }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 28px;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .modal-footer {
+            padding: 20px;
+            background: #f9f9f9;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-danger { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .alert-warning { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #999;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .search-box input,
+        .search-box select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .search-box input {
+            flex: 1;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 200px;
+            }
+            .main-content {
+                margin-left: 200px;
+            }
+            .row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- SIDEBAR -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>ShowWise</h2>
+                <p>Security Dashboard</p>
+            </div>
+            <ul class="nav-items">
+                <li class="nav-item">
+                    <a class="nav-link active" data-section="dashboard" onclick="switchSection('dashboard', event)">
+                        <span class="icon">📊</span>
+                        <span>Overview</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" data-section="organizations" onclick="switchSection('organizations', event)">
+                        <span class="icon">🏢</span>
+                        <span>Organizations</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" data-section="security" onclick="switchSection('security', event)">
+                        <span class="icon">🔒</span>
+                        <span>Security</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" data-section="ips" onclick="switchSection('ips', event)">
+                        <span class="icon">🌐</span>
+                        <span>IP Management</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" data-section="logs" onclick="switchSection('logs', event)">
+                        <span class="icon">📋</span>
+                        <span>Activity & Logs</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <!-- MAIN CONTENT -->
+        <div class="main-content">
+            <div class="topbar">
+                <h1 id="page-title">Dashboard Overview</h1>
+            </div>
+
+            <div class="content-area">
+                <div id="alerts-container"></div>
+
+                <!-- DASHBOARD SECTION -->
+                <div id="dashboard" class="section active">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>Total Organizations</h3>
+                            <div class="value" id="stat-orgs">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Total Users</h3>
+                            <div class="value" id="stat-users">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Security Events</h3>
+                            <div class="value" id="stat-events">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Blocked IPs</h3>
+                            <div class="value" id="stat-blocked-ips">0</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Recent Security Events</h2>
+                        </div>
+                        <div class="card-body">
+                            <div id="recent-events">
+                                <div class="loading"><div class="spinner"></div>Loading...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ORGANIZATIONS SECTION -->
+                <div id="organizations" class="section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Manage Organizations</h2>
+                            <button class="btn btn-primary" onclick="openOrgModal()">
+                                ➕ New Organization
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="search-box">
+                                <input type="text" id="org-search" placeholder="Search organizations..." onkeyup="filterOrganizations()">
+                            </div>
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Slug</th>
+                                            <th>Created</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="organizations-list">
+                                        <tr><td colspan="4" class="loading"><div class="spinner"></div>Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECURITY SECTION -->
+                <div id="security" class="section">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>Critical Events</h3>
+                            <div class="value" id="critical-events">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Failed Logins</h3>
+                            <div class="value" id="failed-logins">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>High Risk Requests</h3>
+                            <div class="value" id="high-risk">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>24h Threats</h3>
+                            <div class="value" id="threats-24h">0</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Security Events</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="search-box">
+                                <input type="text" id="event-search" placeholder="Search events..." onkeyup="filterSecurityEvents()">
+                                <select id="event-type-filter" onchange="filterSecurityEvents()">
+                                    <option value="">All Types</option>
+                                    <option value="login_failed">Failed Login</option>
+                                    <option value="blocked_request">Blocked Request</option>
+                                    <option value="suspicious_activity">Suspicious Activity</option>
+                                </select>
+                            </div>
+
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Event Type</th>
+                                            <th>Description</th>
+                                            <th>Severity</th>
+                                            <th>IP Address</th>
+                                            <th>Time</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="security-events-list">
+                                        <tr><td colspan="5" class="loading"><div class="spinner"></div>Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- IP MANAGEMENT SECTION -->
+                <div id="ips" class="section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>IP Management</h2>
+                            <button class="btn btn-warning" onclick="openIPModal()">
+                                ⊕ Add to Blacklist
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <h3 style="margin-bottom: 15px;">🚫 Blacklisted IPs</h3>
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>IP Address</th>
+                                            <th>Reason</th>
+                                            <th>Severity</th>
+                                            <th>Expires</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="blacklist-list">
+                                        <tr><td colspan="5" class="loading"><div class="spinner"></div>Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <h3 style="margin: 30px 0 15px;">⚠️ Quarantined IPs</h3>
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>IP Address</th>
+                                            <th>Threat Score</th>
+                                            <th>Reason</th>
+                                            <th>Expires</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="quarantine-list">
+                                        <tr><td colspan="5" class="loading"><div class="spinner"></div>Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LOGS SECTION -->
+                <div id="logs" class="section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Activity & Logs</h2>
+                            <button class="btn btn-secondary" onclick="exportLogs()">
+                                📥 Export CSV
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="search-box">
+                                <input type="text" id="log-search" placeholder="Search logs..." onkeyup="filterLogs()">
+                                <select id="log-type-filter" onchange="filterLogs()">
+                                    <option value="">All Logs</option>
+                                    <option value="requests">API Requests</option>
+                                    <option value="security">Security Events</option>
+                                </select>
+                            </div>
+
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Endpoint/Event</th>
+                                            <th>Status/Severity</th>
+                                            <th>IP Address</th>
+                                            <th>Time</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="logs-list">
+                                        <tr><td colspan="5" class="loading"><div class="spinner"></div>Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ORGANIZATION MODAL -->
+    <div id="orgModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="org-modal-title">New Organization</h2>
+                <button class="modal-close" onclick="closeOrgModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="org-form" onsubmit="saveOrganization(event)">
+                    <div class="form-group">
+                        <label>Organization Name *</label>
+                        <input type="text" id="org-name" required placeholder="e.g., Acme Corp">
+                    </div>
+                    <div class="form-group">
+                        <label>Slug / URL *</label>
+                        <input type="text" id="org-slug" required placeholder="e.g., acme-corp">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeOrgModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="document.getElementById('org-form').dispatchEvent(new Event('submit'))">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- IP BLACKLIST MODAL -->
+    <div id="ipModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add IP to Blacklist</h2>
+                <button class="modal-close" onclick="closeIPModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="ip-form" onsubmit="saveIP(event)">
+                    <div class="form-group">
+                        <label>IP Address *</label>
+                        <input type="text" id="ip-address" required placeholder="e.g., 192.168.1.100">
+                    </div>
+                    <div class="form-group">
+                        <label>Reason *</label>
+                        <select id="ip-reason" required>
+                            <option value="">Select reason...</option>
+                            <option value="Malicious activity">Malicious activity</option>
+                            <option value="Brute force attempt">Brute force attempt</option>
+                            <option value="SQL injection attempt">SQL injection attempt</option>
+                            <option value="DDoS attack">DDoS attack</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Severity</label>
+                        <select id="ip-severity">
+                            <option value="LOW">Low</option>
+                            <option value="MEDIUM" selected>Medium</option>
+                            <option value="HIGH">High</option>
+                            <option value="CRITICAL">Critical</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Duration (hours) *</label>
+                        <input type="number" id="ip-duration" value="24" required min="1" max="8760">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeIPModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="document.getElementById('ip-form').dispatchEvent(new Event('submit'))">Blacklist</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api/v1';
+        let allOrganizations = [];
+        let allSecurityEvents = [];
+        let allLogs = [];
+
+        // Get auth token from localStorage
+        let authToken = localStorage.getItem('auth_token') || '';
+
+        async function apiCall(endpoint, method = 'GET', data = null) {
+            const options = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': authToken
+                }
+            };
+
+            if (data) {
+                options.body = JSON.stringify(data);
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, options);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                showAlert(`Error: ${error.message}`, 'danger');
+                throw error;
+            }
+        }
+
+        function switchSection(sectionName, e) {
+            if (e) {
+                e.preventDefault();
+            }
+
+            // Hide all sections
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-link').forEach(a => a.classList.remove('active'));
+
+            // Show selected section
+            document.getElementById(sectionName).classList.add('active');
+            document.querySelector(`[data-section="${sectionName}"]`).classList.add('active');
+
+            // Update title
+            const titles = {
+                dashboard: 'Dashboard Overview',
+                organizations: 'Manage Organizations',
+                security: 'Security Dashboard',
+                ips: 'IP Management',
+                logs: 'Activity & Logs'
+            };
+            document.getElementById('page-title').textContent = titles[sectionName];
+
+            // Load data
+            if (sectionName === 'dashboard') {
+                loadDashboard();
+            } else if (sectionName === 'organizations') {
+                loadOrganizations();
+            } else if (sectionName === 'security') {
+                loadSecurityDashboard();
+            } else if (sectionName === 'ips') {
+                loadIPManagement();
+            } else if (sectionName === 'logs') {
+                loadLogs();
+            }
+        }
+
+        async function loadDashboard() {
+            try {
+                const stats = await apiCall('/admin/system/stats');
+                document.getElementById('stat-orgs').textContent = stats.organizations || 0;
+                document.getElementById('stat-users').textContent = stats.users || 0;
+                document.getElementById('stat-events').textContent = stats.messages || 0;
+
+                const security = await apiCall('/security/dashboard?days=7');
+                document.getElementById('stat-blocked-ips').textContent = security.blocked_ips_count || 0;
+
+                // Recent events
+                const events = await apiCall('/logs/security-events?limit=10');
+                const eventsHtml = (events.events || []).map(e => `
+                    <tr>
+                        <td><span class="badge badge-${e.severity.toLowerCase()}">${e.event_type}</span></td>
+                        <td>${e.description}</td>
+                        <td>${new Date(e.created_at).toLocaleString()}</td>
+                    </tr>
+                `).join('');
+                document.getElementById('recent-events').innerHTML = eventsHtml || '<tr><td colspan="3" class="loading">No events</td></tr>';
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+            }
+        }
+
+        async function loadOrganizations() {
+            try {
+                const response = await apiCall('/organizations');
+                allOrganizations = response.organizations || [];
+                renderOrganizationsTable();
+            } catch (error) {
+                document.getElementById('organizations-list').innerHTML = '<tr><td colspan="4" class="loading">Error loading organizations</td></tr>';
+            }
+        }
+
+        function renderOrganizationsTable() {
+            const html = allOrganizations.map(org => `
+                <tr>
+                    <td>${org.name}</td>
+                    <td><code>${org.slug}</code></td>
+                    <td>${new Date(org.created_at).toLocaleDateString()}</td>
+                    <td>
+                        <button class="btn btn-secondary" onclick="openOrgModal(${JSON.stringify(org).replace(/"/g, '&quot;')})">Edit</button>
+                        <button class="btn btn-danger" onclick="deleteOrganization('${org.slug}')">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+            document.getElementById('organizations-list').innerHTML = html || '<tr><td colspan="4" class="loading">No organizations</td></tr>';
+        }
+
+        function filterOrganizations() {
+            const search = document.getElementById('org-search').value.toLowerCase();
+            const filtered = allOrganizations.filter(org => 
+                org.name.toLowerCase().includes(search) || 
+                org.slug.toLowerCase().includes(search)
+            );
+            allOrganizations = filtered;
+            renderOrganizationsTable();
+        }
+
+        function openOrgModal(org = null) {
+            if (org) {
+                document.getElementById('org-modal-title').textContent = 'Edit Organization';
+                document.getElementById('org-name').value = org.name;
+                document.getElementById('org-slug').value = org.slug;
+                document.getElementById('org-form').dataset.slug = org.slug;
+            } else {
+                document.getElementById('org-modal-title').textContent = 'New Organization';
+                document.getElementById('org-name').value = '';
+                document.getElementById('org-slug').value = '';
+                delete document.getElementById('org-form').dataset.slug;
+            }
+            document.getElementById('orgModal').classList.add('active');
+        }
+
+        function closeOrgModal() {
+            document.getElementById('orgModal').classList.remove('active');
+        }
+
+        async function saveOrganization(e) {
+            e.preventDefault();
+            const name = document.getElementById('org-name').value;
+            const slug = document.getElementById('org-slug').value;
+            const existingSlug = document.getElementById('org-form').dataset.slug;
+
+            try {
+                if (existingSlug) {
+                    await apiCall(`/organizations/${existingSlug}`, 'PUT', { name, slug });
+                    showAlert('Organization updated successfully', 'success');
+                } else {
+                    await apiCall('/organizations', 'POST', { name, slug });
+                    showAlert('Organization created successfully', 'success');
+                }
+                closeOrgModal();
+                loadOrganizations();
+            } catch (error) {
+                console.error('Error saving organization:', error);
+            }
+        }
+
+        async function deleteOrganization(slug) {
+            if (!confirm('Are you sure you want to delete this organization?')) return;
+            try {
+                await apiCall(`/organizations/${slug}`, 'DELETE');
+                showAlert('Organization deleted successfully', 'success');
+                loadOrganizations();
+            } catch (error) {
+                console.error('Error deleting organization:', error);
+            }
+        }
+
+        async function loadSecurityDashboard() {
+            try {
+                const dashboard = await apiCall('/security/dashboard?days=1');
+                document.getElementById('critical-events').textContent = dashboard.critical_events_count || 0;
+                document.getElementById('failed-logins').textContent = dashboard.failed_logins_count || 0;
+                document.getElementById('high-risk').textContent = dashboard.high_risk_count || 0;
+
+                const events = await apiCall('/logs/security-events?limit=50');
+                allSecurityEvents = events.events || [];
+                renderSecurityEventsTable();
+            } catch (error) {
+                console.error('Error loading security dashboard:', error);
+            }
+        }
+
+        function renderSecurityEventsTable() {
+            const html = allSecurityEvents.map(e => `
+                <tr>
+                    <td><span class="badge badge-${e.severity.toLowerCase()}">${e.event_type}</span></td>
+                    <td>${e.description}</td>
+                    <td><span class="badge badge-${e.severity.toLowerCase()}">${e.severity}</span></td>
+                    <td><code>${e.ip_address || '-'}</code></td>
+                    <td>${new Date(e.created_at).toLocaleString()}</td>
+                </tr>
+            `).join('');
+            document.getElementById('security-events-list').innerHTML = html || '<tr><td colspan="5" class="loading">No events</td></tr>';
+        }
+
+        function filterSecurityEvents() {
+            const search = document.getElementById('event-search').value.toLowerCase();
+            const typeFilter = document.getElementById('event-type-filter').value;
+
+            const filtered = allSecurityEvents.filter(e =>
+                (e.description.toLowerCase().includes(search) || e.ip_address?.includes(search)) &&
+                (!typeFilter || e.event_type === typeFilter)
+            );
+
+            allSecurityEvents = filtered;
+            renderSecurityEventsTable();
+        }
+
+        async function loadIPManagement() {
+            try {
+                const blacklist = await apiCall('/security/blocked-ips');
+                const quarantine = await apiCall('/security/quarantined-ips');
+
+                const blacklistHtml = (blacklist.ips || []).map(ip => `
+                    <tr>
+                        <td><code>${ip.ip_address}</code></td>
+                        <td>${ip.reason}</td>
+                        <td><span class="badge badge-${ip.severity.toLowerCase()}">${ip.severity}</span></td>
+                        <td>${new Date(ip.expires_at).toLocaleString()}</td>
+                        <td><button class="btn btn-success" onclick="whitelistIP('${ip.ip_address}')">Remove</button></td>
+                    </tr>
+                `).join('');
+                document.getElementById('blacklist-list').innerHTML = blacklistHtml || '<tr><td colspan="5" class="loading">No blacklisted IPs</td></tr>';
+
+                const quarantineHtml = (quarantine.ips || []).map(ip => `
+                    <tr>
+                        <td><code>${ip.ip_address}</code></td>
+                        <td>${ip.threat_score || 50}%</td>
+                        <td>${ip.reason}</td>
+                        <td>${new Date(ip.expires_at).toLocaleString()}</td>
+                        <td><button class="btn btn-success" onclick="whitelistIP('${ip.ip_address}')">Clear</button></td>
+                    </tr>
+                `).join('');
+                document.getElementById('quarantine-list').innerHTML = quarantineHtml || '<tr><td colspan="5" class="loading">No quarantined IPs</td></tr>';
+            } catch (error) {
+                console.error('Error loading IP management:', error);
+            }
+        }
+
+        function openIPModal() {
+            document.getElementById('ip-address').value = '';
+            document.getElementById('ip-reason').value = '';
+            document.getElementById('ip-severity').value = 'MEDIUM';
+            document.getElementById('ip-duration').value = '24';
+            document.getElementById('ipModal').classList.add('active');
+        }
+
+        function closeIPModal() {
+            document.getElementById('ipModal').classList.remove('active');
+        }
+
+        async function saveIP(e) {
+            e.preventDefault();
+            const ip = document.getElementById('ip-address').value;
+            const reason = document.getElementById('ip-reason').value;
+            const severity = document.getElementById('ip-severity').value;
+            const duration = parseInt(document.getElementById('ip-duration').value);
+
+            try {
+                await apiCall(`/security/ip/${ip}/blacklist`, 'POST', {
+                    reason,
+                    severity,
+                    duration_hours: duration
+                });
+                showAlert('IP blacklisted successfully', 'success');
+                closeIPModal();
+                loadIPManagement();
+            } catch (error) {
+                console.error('Error blacklisting IP:', error);
+            }
+        }
+
+        async function whitelistIP(ip) {
+            if (!confirm(`Remove ${ip} from list?`)) return;
+            try {
+                await apiCall(`/security/ip/${ip}/whitelist`, 'POST');
+                showAlert('IP removed from list', 'success');
+                loadIPManagement();
+            } catch (error) {
+                console.error('Error removing IP:', error);
+            }
+        }
+
+        async function loadLogs() {
+            try {
+                const requests = await apiCall('/logs/requests?limit=50');
+                const events = await apiCall('/logs/security-events?limit=50');
+
+                allLogs = [
+                    ...(requests.requests || []).map(r => ({ type: 'request', ...r })),
+                    ...(events.events || []).map(e => ({ type: 'event', ...e }))
+                ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+                renderLogsTable();
+            } catch (error) {
+                console.error('Error loading logs:', error);
+            }
+        }
+
+        function renderLogsTable() {
+            const html = allLogs.map(log => {
+                if (log.type === 'request') {
+                    return `
+                        <tr>
+                            <td><span class="badge badge-info">API Request</span></td>
+                            <td><code>${log.endpoint}</code> ${log.method}</td>
+                            <td><span class="badge badge-${log.status_code < 400 ? 'success' : 'danger'}">${log.status_code}</span></td>
+                            <td><code>${log.ip_address}</code></td>
+                            <td>${new Date(log.created_at).toLocaleString()}</td>
+                        </tr>
+                    `;
+                } else {
+                    return `
+                        <tr>
+                            <td><span class="badge badge-warning">Security</span></td>
+                            <td>${log.event_type}</td>
+                            <td><span class="badge badge-${log.severity.toLowerCase()}">${log.severity}</span></td>
+                            <td><code>${log.ip_address || '-'}</code></td>
+                            <td>${new Date(log.created_at).toLocaleString()}</td>
+                        </tr>
+                    `;
+                }
+            }).join('');
+            document.getElementById('logs-list').innerHTML = html || '<tr><td colspan="5" class="loading">No logs</td></tr>';
+        }
+
+        function filterLogs() {
+            const search = document.getElementById('log-search').value.toLowerCase();
+            const typeFilter = document.getElementById('log-type-filter').value;
+
+            // Re-filter from original data
+            const filtered = allLogs.filter(log => {
+                const matchesType = !typeFilter || 
+                    (typeFilter === 'requests' && log.type === 'request') ||
+                    (typeFilter === 'security' && log.type === 'event');
+                
+                const matchesSearch = search === '' || 
+                    (log.endpoint?.toLowerCase().includes(search)) ||
+                    (log.event_type?.toLowerCase().includes(search)) ||
+                    (log.ip_address?.includes(search));
+
+                return matchesType && matchesSearch;
+            });
+
+            allLogs = filtered;
+            renderLogsTable();
+        }
+
+        function exportLogs() {
+            const csv = convertToCSV(allLogs);
+            downloadCSV(csv, 'showwise-logs.csv');
+        }
+
+        function convertToCSV(data) {
+            const headers = ['Type', 'Endpoint/Event', 'Status/Severity', 'IP Address', 'Timestamp'];
+            const rows = data.map(log => [
+                log.type === 'request' ? 'API Request' : 'Security',
+                log.endpoint || log.event_type,
+                log.status_code || log.severity,
+                log.ip_address || '-',
+                new Date(log.created_at).toISOString()
+            ]);
+
+            return [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+        }
+
+        function downloadCSV(csv, filename) {
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+        }
+
+        function showAlert(message, type = 'info') {
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            document.getElementById('alerts-container').appendChild(alert);
+            setTimeout(() => alert.remove(), 5000);
+        }
+
+        // Initial load
+        loadDashboard();
+    </script>
+</body>
+</html>

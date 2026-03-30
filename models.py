@@ -308,23 +308,141 @@ class UptimeRecord(db.Model):
 
 
 class KillSwitch(db.Model):
-    """Kill switch for organizations"""
     __tablename__ = 'kill_switches'
-
-    id = db.Column(db.Integer, primary_key=True)
+ 
+    id              = db.Column(db.Integer, primary_key=True)
     organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'),
                                  nullable=False, index=True, unique=True)
+ 
+    is_enabled   = db.Column(db.Boolean, default=False, index=True)
+    reason       = db.Column(db.String(255))
+ 
+    enabled_at   = db.Column(db.DateTime)
+    enabled_by   = db.Column(db.String(120))
+    disabled_at  = db.Column(db.DateTime)
+    disabled_by  = db.Column(db.String(120))
+ 
+    updated_at   = db.Column(db.DateTime, default=datetime.utcnow,
+                             onupdate=datetime.utcnow)
+ 
+    # --- Licence key ---
+    license_key    = db.Column(db.String(128), nullable=True)
+    license_expiry = db.Column(db.DateTime,    nullable=True)
+    key_duration   = db.Column(db.Integer,     default=86400)
 
-    is_enabled = db.Column(db.Boolean, default=False, index=True)
+
+class SecurityEvent(db.Model):
+    """Security events and audit trail"""
+    __tablename__ = 'security_events'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    event_type = db.Column(db.String(100), nullable=False, index=True)
+    description = db.Column(db.Text)
+    severity = db.Column(db.String(20), default='INFO', index=True)  # INFO, WARNING, ERROR, CRITICAL
+    
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    ip_address = db.Column(db.String(45), nullable=False, index=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=True, index=True)
+    
+    event_metadata = db.Column(db.JSON)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'event_type': self.event_type,
+            'description': self.description,
+            'severity': self.severity,
+            'user_id': self.user_id,
+            'ip_address': self.ip_address,
+            'organization_id': self.organization_id,
+            'metadata': self.event_metadata or {},
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class RequestLog(db.Model):
+    """API request logging"""
+    __tablename__ = 'request_logs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    endpoint = db.Column(db.String(255), nullable=False, index=True)
+    method = db.Column(db.String(10), nullable=False)
+    status_code = db.Column(db.Integer, index=True)
+    
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    ip_address = db.Column(db.String(45), nullable=False, index=True)
+    
+    response_time_ms = db.Column(db.Float)
+    request_data = db.Column(db.JSON)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'endpoint': self.endpoint,
+            'method': self.method,
+            'status_code': self.status_code,
+            'user_id': self.user_id,
+            'ip_address': self.ip_address,
+            'response_time_ms': self.response_time_ms,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class IPBlacklist(db.Model):
+    """IP addresses that are completely blocked"""
+    __tablename__ = 'ip_blacklist'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    ip_address = db.Column(db.String(45), unique=True, nullable=False, index=True)
     reason = db.Column(db.String(255))
+    severity = db.Column(db.String(20), default='MEDIUM')  # LOW, MEDIUM, HIGH, CRITICAL
+    
+    is_active = db.Column(db.Boolean, default=True, index=True)
+    expires_at = db.Column(db.DateTime, index=True)
+    
+    added_by = db.Column(db.String(120))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'ip_address': self.ip_address,
+            'reason': self.reason,
+            'severity': self.severity,
+            'is_active': self.is_active,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
 
-    enabled_at = db.Column(db.DateTime)
-    enabled_by = db.Column(db.String(120))
 
-    disabled_at = db.Column(db.DateTime)
-    disabled_by = db.Column(db.String(120))
-
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+class IPQuarantine(db.Model):
+    """IP addresses under monitoring (warning status)"""
+    __tablename__ = 'ip_quarantine'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    ip_address = db.Column(db.String(45), unique=True, nullable=False, index=True)
+    reason = db.Column(db.String(255))
+    threat_score = db.Column(db.Integer, default=50)  # 0-100
+    
+    is_active = db.Column(db.Boolean, default=True, index=True)
+    expires_at = db.Column(db.DateTime, index=True)
+    
+    added_by = db.Column(db.String(120))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'ip_address': self.ip_address,
+            'reason': self.reason,
+            'threat_score': self.threat_score,
+            'is_active': self.is_active,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 # Association table

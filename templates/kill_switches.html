@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-header">
   <h1><i class="fas fa-power-off"></i> Kill Switch Management</h1>
-  <p>Emergency instance shutdown controls</p>
+  <p>Emergency instance shutdown &amp; licence key controls</p>
 </div>
 
 <div class="card" style="margin-bottom:2rem;background:#fef2f2;border-color:var(--danger);">
@@ -12,8 +12,10 @@
     <div>
       <h3 style="font-weight:800;margin-bottom:0.5rem;">⚠️ Critical Feature</h3>
       <p style="color:var(--gray-700);line-height:1.8;">
-        Kill switches allow you to remotely disable instances (e.g., non-payment).
-        Instances should check <code>GET /api/kill-switch/{slug}</code> and display a "Service Suspended" page when enabled.
+        Kill switches remotely disable instances. Each instance holds a <strong>licence key</strong>
+        issued from this dashboard. The instance pings <code>POST /api/kill-switch/ping</code> at its
+        configured interval. When the remaining TTL is ≤ 2× the ping interval, a new key is issued
+        automatically. If the backend is unreachable the instance trusts its cached key until it expires.
       </p>
     </div>
   </div>
@@ -21,57 +23,114 @@
 
 <div style="display:grid;gap:1.5rem;">
   {% for slug, org in organizations.items() %}
+  {% set ks = kill_switches.get(slug, {}) %}
   <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:start;gap:2rem;">
-      <div style="flex:1;">
-        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;">
+    <div style="display:flex;justify-content:space-between;align-items:start;gap:2rem;flex-wrap:wrap;">
+
+      <!-- LEFT: org info + status -->
+      <div style="flex:1;min-width:260px;">
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
           {% if org.logo %}
           <img src="{{ org.logo }}" alt="{{ org.name }}" style="width:40px;height:40px;object-fit:contain;">
           {% endif %}
           <h3 style="font-size:1.25rem;font-weight:800;">{{ org.name }}</h3>
+          <code style="font-size:0.8rem;background:var(--gray-100);padding:0.2rem 0.5rem;border-radius:4px;">{{ slug }}</code>
         </div>
 
-        {% if kill_switches.get(slug, {}).get('enabled') %}
+        <!-- Kill-switch status banner -->
+        {% if ks.get('enabled') %}
         <div style="background:#fef2f2;border-left:4px solid var(--danger);padding:1rem;border-radius:8px;margin-bottom:1rem;">
-          <div style="font-weight:700;color:var(--danger);margin-bottom:0.5rem;"><i class="fas fa-ban"></i> KILL SWITCH ACTIVE</div>
-          <div style="font-size:0.9rem;color:var(--gray-700);">
-            <strong>Reason:</strong> {{ kill_switches[slug].get('reason') or 'No reason provided' }}
+          <div style="font-weight:700;color:var(--danger);margin-bottom:0.25rem;">
+            <i class="fas fa-ban"></i> KILL SWITCH ACTIVE
           </div>
-          {% if kill_switches[slug].get('enabled_by') %}
-          <div style="font-size:0.85rem;color:var(--gray-600);margin-top:0.5rem;">
-            Enabled by {{ kill_switches[slug].enabled_by }} at {{ kill_switches[slug].enabled_at[:16] if kill_switches[slug].enabled_at else 'unknown time' }}
+          <div style="font-size:0.9rem;color:var(--gray-700);">
+            <strong>Reason:</strong> {{ ks.get('reason') or 'No reason provided' }}
+          </div>
+          {% if ks.get('enabled_by') %}
+          <div style="font-size:0.85rem;color:var(--gray-600);margin-top:0.25rem;">
+            Enabled by <strong>{{ ks.enabled_by }}</strong>
+            {% if ks.get('enabled_at') %}at {{ ks.enabled_at[:16] }}{% endif %}
           </div>
           {% endif %}
         </div>
 
+        <!-- Update reason -->
         <form method="POST" action="{{ url_for('update_kill_switch', org_slug=slug) }}" style="margin-bottom:1rem;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-          <div class="form-group" style="margin-bottom:0.5rem;">
-            <label for="reason_{{ slug }}">Update Reason</label>
-            <input type="text" id="reason_{{ slug }}" name="reason"
-                   value="{{ kill_switches[slug].get('reason', '') }}"
-                   placeholder="Payment overdue, trial expired, …">
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            <input type="text" name="reason" value="{{ ks.get('reason', '') }}"
+                   placeholder="Reason (e.g. payment overdue, trial expired…)"
+                   style="flex:1;">
+            <button type="submit" class="btn btn-secondary" style="white-space:nowrap;">
+              <i class="fas fa-save"></i> Update
+            </button>
           </div>
-          <button type="submit" class="btn btn-secondary" style="padding:0.5rem 1rem;font-size:0.9rem;">
-            <i class="fas fa-save"></i> Update Reason
-          </button>
         </form>
 
         {% else %}
-        <div style="background:#ecfdf5;border-left:4px solid var(--success);padding:1rem;border-radius:8px;">
-          <div style="font-weight:700;color:var(--success);"><i class="fas fa-check-circle"></i> Instance Active</div>
+        <div style="background:#ecfdf5;border-left:4px solid var(--success);padding:1rem;border-radius:8px;margin-bottom:1rem;">
+          <div style="font-weight:700;color:var(--success);">
+            <i class="fas fa-check-circle"></i> Instance Active
+          </div>
           <div style="font-size:0.9rem;color:var(--gray-700);">Kill switch is not enabled</div>
         </div>
         {% endif %}
+
+        <!-- Licence key info -->
+        <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:1rem;">
+          <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;color:var(--gray-600);margin-bottom:0.75rem;letter-spacing:0.05em;">
+            <i class="fas fa-key"></i> Licence Key
+          </div>
+          {% if ks.get('license_key') %}
+          <div style="font-family:monospace;font-size:0.8rem;color:var(--gray-700);word-break:break-all;margin-bottom:0.5rem;">
+            {{ ks.license_key[:32] }}…
+          </div>
+          <div style="font-size:0.85rem;color:var(--gray-600);">
+            Expires:
+            {% if ks.get('license_expiry') %}
+              {% set expiry = ks.license_expiry %}
+              <strong>{{ expiry[:16] }}</strong>
+            {% else %}
+              <em style="color:var(--warning);">unknown</em>
+            {% endif %}
+          </div>
+          {% else %}
+          <div style="font-size:0.9rem;color:var(--warning);">
+            <i class="fas fa-exclamation-circle"></i> No key issued yet — issue one using the form on the right.
+          </div>
+          {% endif %}
+        </div>
       </div>
 
-      <div>
+      <!-- RIGHT: action buttons -->
+      <div style="display:flex;flex-direction:column;gap:0.75rem;min-width:220px;">
+
+        <!-- Toggle kill switch -->
         <a href="{{ url_for('toggle_kill_switch', org_slug=slug) }}"
-           class="btn {% if kill_switches.get(slug, {}).get('enabled') %}btn-success{% else %}btn-danger{% endif %}"
-           onclick="return confirm('{% if kill_switches.get(slug, {}).get('enabled') %}DISABLE{% else %}ENABLE{% endif %} kill switch for {{ org.name }}?');">
-          <i class="fas fa-{% if kill_switches.get(slug, {}).get('enabled') %}play{% else %}ban{% endif %}"></i>
-          {% if kill_switches.get(slug, {}).get('enabled') %}Disable{% else %}Enable{% endif %}
+           class="btn {% if ks.get('enabled') %}btn-success{% else %}btn-danger{% endif %}"
+           onclick="return confirm('{% if ks.get('enabled') %}DISABLE{% else %}ENABLE{% endif %} kill switch for {{ org.name }}?');">
+          <i class="fas fa-{% if ks.get('enabled') %}play{% else %}ban{% endif %}"></i>
+          {% if ks.get('enabled') %}Disable Kill Switch{% else %}Enable Kill Switch{% endif %}
         </a>
+
+        <!-- Issue / renew licence key -->
+        <form method="POST" action="{{ url_for('issue_license_key', org_slug=slug) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <label style="font-size:0.85rem;font-weight:700;color:var(--gray-700);margin-bottom:0.4rem;display:block;">
+            Key validity (days)
+          </label>
+          <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.5rem;">
+            <input type="number" name="duration_days" value="30" min="1" max="3650"
+                   style="width:80px;padding:0.5rem 0.75rem;border:1px solid var(--gray-300);border-radius:6px;">
+            <span style="font-size:0.9rem;color:var(--gray-600);">days</span>
+          </div>
+          <button type="submit" class="btn btn-primary"
+                  onclick="return confirm('Issue a new licence key for {{ org.name }}?\nThe current key will be invalidated immediately.');"
+                  style="width:100%;">
+            <i class="fas fa-key"></i> Issue / Renew Key
+          </button>
+        </form>
+
       </div>
     </div>
   </div>
@@ -83,5 +142,25 @@
     <p style="color:var(--gray-600);">Add organizations first to manage kill switches.</p>
   </div>
   {% endif %}
+</div>
+
+<!-- How it works -->
+<div class="card" style="margin-top:2rem;background:#f0f4ff;border-color:var(--primary);">
+  <h3 style="margin-bottom:0.75rem;"><i class="fas fa-info-circle"></i> How the Licence-Key System Works</h3>
+  <ol style="line-height:2.2;color:var(--gray-700);padding-left:1.5rem;">
+    <li>Issue a key with the desired validity period using the form above.</li>
+    <li>The instance stores the key to disk (<code>.license_key</code>) and presents it on every ping.</li>
+    <li>When remaining TTL ≤ 2 × the instance's <code>PING_INTERVAL</code>, the backend issues a fresh key in the same response — no manual action needed.</li>
+    <li>If the backend is unreachable, the instance continues running until its cached key expires (fail-open while valid, fail-closed on expiry).</li>
+    <li>Enabling the kill switch suspends the instance regardless of key validity.</li>
+  </ol>
+  <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--gray-300);">
+    <strong>Relevant env vars on instances:</strong>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:0.5rem;margin-top:0.5rem;">
+      <code style="background:white;padding:0.4rem 0.75rem;border-radius:6px;font-size:0.85rem;">PING_INTERVAL=300</code>
+      <code style="background:white;padding:0.4rem 0.75rem;border-radius:6px;font-size:0.85rem;">CONFIG_REFRESH=3600</code>
+      <code style="background:white;padding:0.4rem 0.75rem;border-radius:6px;font-size:0.85rem;">LICENSE_KEY_FILE=.license_key</code>
+    </div>
+  </div>
 </div>
 {% endblock %}
