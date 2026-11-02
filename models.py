@@ -198,3 +198,39 @@ class SupportSigningKey(db.Model):
     private_enc = db.Column(db.Text, nullable=False)       # '' once revoked
     status = db.Column(db.String(16), nullable=False, default='active', index=True)  # active|retired|revoked
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Log(db.Model):
+    """Security and support audit events written by auth.py and support_admin.py."""
+    __tablename__ = 'logs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    log_type = db.Column(db.String(80), nullable=False, index=True)
+    level = db.Column(db.String(20), nullable=False, default='info')
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=True, index=True)
+    message = db.Column(db.Text, nullable=False)
+    ip_address = db.Column(db.String(45))
+    user_agent = db.Column(db.String(255))
+    event_metadata = db.Column(db.JSON, nullable=False, default=dict)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+
+class Setting(db.Model):
+    """Per-organization feature settings used by the support access portal."""
+    __tablename__ = 'settings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(
+        db.Integer, db.ForeignKey('organizations.id', ondelete='CASCADE'),
+        nullable=False, index=True
+    )
+    key = db.Column(db.String(100), nullable=False)
+    value = db.Column(db.String(255), nullable=False, default='')
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow,
+                           onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('organization_id', 'key', name='uq_settings_org_key'),
+    )
