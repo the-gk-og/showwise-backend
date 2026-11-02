@@ -710,8 +710,27 @@ def ensure_schema():
     if 'users' in inspector.get_table_names():
         columns = {c['name'] for c in inspector.get_columns('users')}
         if 'totp_last_step' not in columns:
-            db.session.execute(db.text('ALTER TABLE users ADD COLUMN totp_last_step INTEGER'))
-            db.session.commit()
+            try:
+                db.session.execute(db.text('ALTER TABLE users ADD COLUMN totp_last_step INTEGER'))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()  # another worker added it first
+                columns = {c['name'] for c in db.inspect(db.engine).get_columns('users')}
+                if 'totp_last_step' not in columns:
+                    raise
+
+
+def _prepare_database():
+    """Runs when the module is imported, so it also happens under gunicorn (which never calls init_db)."""
+    with app.app_context():
+        try:
+            db.create_all()
+            ensure_schema()
+        except Exception as exc:  # never stop the app from booting; the error shows in the logs
+            print(f'! Database preparation failed: {exc}')
+
+
+_prepare_database()
 
 
 def init_db():
