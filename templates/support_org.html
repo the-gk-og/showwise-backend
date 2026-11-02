@@ -8,7 +8,7 @@
 </div>
 
 <div class="card" style="margin-bottom:2rem;max-width:800px;">
-  <h2 style="margin-bottom:1rem;">Support login</h2>
+  <h2 style="margin-bottom:1rem;"><i class="fas fa-right-to-bracket"></i> Log in to this instance</h2>
   {% if not url_ok %}
     <p style="color:var(--danger);">This organization needs a valid <code>https://</code> URL before you can log in. <a href="{{ url_for('edit_organization', slug=org.slug) }}">Edit organization</a></p>
   {% elif not enabled %}
@@ -31,7 +31,7 @@
       {% endif %}
     </div>
     <button class="btn btn-primary"><i class="fas fa-right-to-bracket"></i> Log in to {{ org.name }}</button>
-    <p style="color:var(--gray-600);font-size:.9rem;margin-top:1rem;">Opens the instance in this browser. The session is time-limited, shows a red banner and is logged on the instance and here.</p>
+    <p style="color:var(--gray-600);font-size:.9rem;margin-top:1rem;">Choose your access level, duration, and reason above, then select <strong>Log in to {{ org.name }}</strong>. This creates a single-use support session in this browser. The login option is only available when the instance URL is valid, support access is enabled, and required 2FA is configured.</p>
   </form>
   {% endif %}
 </div>

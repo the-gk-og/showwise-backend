@@ -8,12 +8,15 @@ from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
-import json, os, secrets
+import json, os, secrets, ipaddress, socket, time
+from urllib.parse import urlparse
 from datetime import datetime, timedelta
+import requests
 
 load_dotenv()
 
 app = Flask(__name__)
+APP_STARTED_AT = time.monotonic()
 app.secret_key = os.getenv('SECRET_KEY', 'fallback-secret-key-change-in-production')
 
 app.config.update(
@@ -50,7 +53,7 @@ CORS(app, resources={
     }
 })
 
-from models import db, User, Organization, KillSwitch
+from models import db, User, Organization, KillSwitch, Log
 from auth import (
     login_required, admin_required, require_2fa,
     get_client_ip, get_user_agent, log_security_event,
@@ -493,6 +496,120 @@ def api_kill_switch(slug):
         'reason': (ks.reason or '') if ks else '',
     })
 
+
+
+# =============================================================================
+# ADMIN MONITORING AND MANAGEMENT
+# =============================================================================
+
+@app.route('/logs')
+@login_required
+@admin_required
+def logs_list():
+    query = Log.query
+    log_type = request.args.get('type', '').strip()[:80]
+    level = request.args.get('level', '').strip()[:20]
+    search = request.args.get('q', '').strip()[:120]
+    if log_type:
+        query = query.filter(Log.log_type == log_type)
+    if level:
+        query = query.filter(Log.level == level)
+    if search:
+        pattern = f"%{search}%"
+        query = query.filter(db.or_(Log.message.ilike(pattern), Log.ip_address.ilike(pattern),
+                                    Log.user_agent.ilike(pattern)))
+    logs = query.order_by(Log.created_at.desc()).limit(250).all()
+    types = [row[0] for row in db.session.query(Log.log_type).distinct().order_by(Log.log_type).all()]
+    return render_template('logs.html', logs=logs, types=types, selected_type=log_type,
+                           selected_level=level, search=search)
+
+
+@app.route('/users')
+@login_required
+@admin_required
+def users_list():
+    users = User.query.order_by(User.created_at.desc()).all()
+    return render_template('users.html', users=users, current_user_id=session.get('user_id'))
+
+
+@app.route('/users/<int:user_id>/toggle', methods=['POST'])
+@login_required
+@admin_required
+def toggle_user(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.id == session.get('user_id'):
+        flash("You cannot deactivate your own account.", "error")
+        return redirect(url_for('users_list'))
+    user.is_active = not user.is_active
+    db.session.commit()
+    log_security_event('user_toggled', f"User {user.username} {'activated' if user.is_active else 'deactivated'}",
+                       'warning' if not user.is_active else 'info', user_id=session.get('user_id'))
+    flash(f"User {user.username} {'activated' if user.is_active else 'deactivated'}.", 'success')
+    return redirect(url_for('users_list'))
+
+
+@app.route('/users/<int:user_id>/unlock', methods=['POST'])
+@login_required
+@admin_required
+def unlock_user(user_id):
+    user = User.query.get_or_404(user_id)
+    unlock_account(user)
+    log_security_event('user_unlocked', f"Login lockout cleared for {user.username}",
+                       'warning', user_id=session.get('user_id'))
+    flash(f"Login lockout cleared for {user.username}.", 'success')
+    return redirect(url_for('users_list'))
+
+
+def _instance_health(org):
+    """Check an explicitly configured public HTTPS health endpoint with a short timeout."""
+    raw_url = (org.url or '').strip()
+    parsed = urlparse(raw_url)
+    if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password:
+        return {'status': 'unknown', 'detail': 'A valid HTTPS URL is required', 'latency_ms': None}
+    try:
+        addresses = socket.getaddrinfo(parsed.hostname, parsed.port or 443, type=socket.SOCK_STREAM)
+        if not addresses:
+            raise OSError('No DNS addresses')
+        for address in addresses:
+            ip = ipaddress.ip_address(address[4][0])
+            if not ip.is_global:
+                return {'status': 'blocked', 'detail': 'URL resolves to a non-public address', 'latency_ms': None}
+        start = time.monotonic()
+        response = requests.get(raw_url.rstrip('/') + '/api/health', timeout=3,
+                                allow_redirects=False, headers={'User-Agent': 'ShowWise-Uptime-Check/1.0'})
+        latency = round((time.monotonic() - start) * 1000)
+        if response.status_code == 200:
+            try:
+                payload = response.json()
+                healthy = payload.get('status') == 'ok'
+            except (ValueError, AttributeError):
+                healthy = False
+            return {'status': 'up' if healthy else 'degraded',
+                    'detail': f'HTTP {response.status_code}', 'latency_ms': latency}
+        return {'status': 'degraded', 'detail': f'HTTP {response.status_code}', 'latency_ms': latency}
+    except requests.RequestException as exc:
+        return {'status': 'down', 'detail': type(exc).__name__, 'latency_ms': None}
+    except (OSError, ValueError) as exc:
+        return {'status': 'down', 'detail': type(exc).__name__, 'latency_ms': None}
+
+
+@app.route('/uptime')
+@login_required
+@admin_required
+def uptime_dashboard():
+    database_ok = True
+    try:
+        db.session.execute(db.text('SELECT 1'))
+    except Exception:
+        db.session.rollback()
+        database_ok = False
+    instances = []
+    for org in Organization.query.order_by(Organization.name).all():
+        health = _instance_health(org)
+        instances.append({'org': org, **health})
+    return render_template('uptime.html', instances=instances, database_ok=database_ok,
+                           uptime_seconds=max(0, int(time.monotonic() - APP_STARTED_AT)),
+                           checked_at=datetime.utcnow())
 
 # =============================================================================
 # ERROR HANDLERS
