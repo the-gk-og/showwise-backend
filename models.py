@@ -12,6 +12,7 @@ import secrets
 import time
 from datetime import datetime
 import qrcode
+from qrcode.image.pure import PyPNGImage
 import io
 import base64
 
@@ -77,10 +78,12 @@ class User(db.Model):
         qr = qrcode.QRCode(version=1, box_size=10, border=5)
         qr.add_data(url)
         qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
+        # Always use the pure-Python PNG writer (pypng, installed with qrcode). The default writer needs Pillow,
+        # which the container does not have, and the two have different save() signatures.
+        img = qr.make_image(image_factory=PyPNGImage)
 
         buffer = io.BytesIO()
-        img.save(buffer, format='PNG')
+        img.save(buffer)
         buffer.seek(0)
         return base64.b64encode(buffer.getvalue()).decode()
 
