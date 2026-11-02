@@ -16,6 +16,17 @@
 {% else %}
 
 <div class="card" style="margin-bottom:2rem;">
+  <h2 style="margin-bottom:.75rem;"><i class="fas fa-shield-halved"></i> Your two-factor authentication</h2>
+  {% if me and me.is_2fa_enabled %}
+    <p style="color:var(--success);font-weight:700;margin-bottom:1rem;">Authenticator 2FA is enabled.</p>
+    <a class="btn btn-secondary" href="{{ url_for('support.twofa_page') }}">View 2FA status</a>
+  {% else %}
+    <p style="margin-bottom:1rem;">Enable authenticator 2FA before generating support logins when the requirement is enabled.</p>
+    <a class="btn btn-primary" href="{{ url_for('support.twofa_page') }}"><i class="fas fa-lock"></i> Set up 2FA</a>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-bottom:2rem;">
   <h2 style="margin-bottom:1rem;">Instances</h2>
   <div class="table-container"><table>
     <thead><tr><th>Name</th><th>Instance ID</th><th>URL</th><th>Last support login</th><th>Support</th><th></th></tr></thead>
