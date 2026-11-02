@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Support Access - ShowWise Backend{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1><i class="fas fa-life-ring"></i> Support Access</h1>
+  <p>Log in to an organization's instance for support. Tokens are short-lived, single-use and logged.</p>
+</div>
+
+{% if not ready %}
+<div class="card">
+  <h2 style="margin-bottom:1rem;"><i class="fas fa-triangle-exclamation"></i> Not configured</h2>
+  <p>Set <code>SUPPORT_MASTER_KEY</code> in the backend environment and restart. Generate one with:</p>
+  <pre style="background:var(--gray-100);padding:1rem;border-radius:8px;margin:1rem 0;overflow-x:auto;">python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"</pre>
+  <p style="color:var(--gray-600);">It encrypts the signing key stored in the database. Keep it out of git and out of the database.</p>
+</div>
+{% else %}
+
+<div class="card" style="margin-bottom:2rem;">
+  <h2 style="margin-bottom:1rem;">Instances</h2>
+  <div class="table-container"><table>
+    <thead><tr><th>Name</th><th>Instance ID</th><th>URL</th><th>Last support login</th><th>Support</th><th></th></tr></thead>
+    <tbody>
+    {% for org in orgs %}
+      <tr>
+        <td><strong>{{ org.name }}</strong></td>
+        <td><code>{{ org.slug }}</code></td>
+        <td>{{ org.url or '—' }}</td>
+        <td>{{ last.get(org.id)|sfmt }}</td>
+        <td>{% if org.id in disabled %}<span style="color:var(--danger);font-weight:700;">Disabled</span>{% else %}<span style="color:var(--success);font-weight:700;">Allowed</span>{% endif %}</td>
+        <td><a class="btn btn-primary" href="{{ url_for('support.org_page', slug=org.slug) }}"><i class="fas fa-right-to-bracket"></i> Open</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" style="color:var(--gray-600);">No organizations yet. Add one under Instances.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+<div class="card" style="margin-bottom:2rem;">
+  <h2 style="margin-bottom:1rem;">Signing keys</h2>
+  <div class="table-container"><table>
+    <thead><tr><th>Key</th><th>Status</th><th>Created</th><th></th></tr></thead>
+    <tbody>
+    {% for k in keys %}
+      <tr><td><code>{{ k.kid }}</code></td><td>{{ k.status }}</td><td>{{ k.created_at|sfmt }}</td>
+        <td>{% if k.status == 'retired' %}
+          <form method="POST" action="{{ url_for('support.key_revoke', kid=k.kid) }}" onsubmit="return confirm('Revoke this key? Instances that only trust it will reject tokens.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button class="btn btn-danger">Revoke</button></form>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p style="margin:1rem 0 .5rem;">Value for <code>SUPPORT_PUBLIC_KEY</code> on instances:</p>
+  <pre style="background:var(--gray-100);padding:1rem;border-radius:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;">{{ env }}</pre>
+  <form method="POST" action="{{ url_for('support.key_rotate') }}" style="margin-top:1rem;" onsubmit="return confirm('Generate a new signing key? The old one stays valid until you revoke it, so update instances first.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <button class="btn btn-secondary"><i class="fas fa-rotate"></i> Rotate signing key</button>
+  </form>
+  <p style="color:var(--gray-600);font-size:.9rem;margin-top:.75rem;">Rotation: rotate, paste the new value on every instance (it lists the new and old key), then revoke the old key.</p>
+</div>
+
+<div class="card">
+  <h2 style="margin-bottom:1rem;">Recent support logins</h2>
+  {% include "_support_log.html" %}
+  <p style="margin-top:1rem;"><a href="{{ url_for('logs_list', type='support_login') }}">Full history in Logs &rarr;</a></p>
+</div>
+{% endif %}
+{% endblock %}

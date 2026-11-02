@@ -1,0 +1,7 @@
+<div class="table-container"><table>
+  <thead><tr><th>Time</th><th>Event</th></tr></thead>
+  <tbody>
+  {% for r in recent %}<tr><td style="white-space:nowrap;">{{ r.created_at|sfmt }}</td><td>{{ r.message }}</td></tr>
+  {% else %}<tr><td colspan="2" style="color:var(--gray-600);">No support logins yet.</td></tr>{% endfor %}
+  </tbody>
+</table></div>

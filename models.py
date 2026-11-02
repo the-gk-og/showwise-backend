@@ -179,3 +179,22 @@ class KillSwitch(db.Model):
             'disabled_by': self.disabled_by,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+# Association table
+user_organization = db.Table(
+    'user_organization',
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
+    db.Column('organization_id', db.Integer, db.ForeignKey('organizations.id'), primary_key=True),
+)
+
+class SupportSigningKey(db.Model):
+    """Ed25519 key used to sign support-login tokens. The private half is Fernet-encrypted
+    with SUPPORT_MASTER_KEY (see support_admin.py)."""
+    __tablename__ = 'support_signing_keys'
+
+    kid = db.Column(db.String(16), primary_key=True)
+    public_b64 = db.Column(db.String(64), nullable=False)
+    private_enc = db.Column(db.Text, nullable=False)       # '' once revoked
+    status = db.Column(db.String(16), nullable=False, default='active', index=True)  # active|retired|revoked
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

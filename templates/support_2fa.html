@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}2FA Setup - ShowWise Backend{% endblock %}
+{% block content %}
+<div class="page-header">
+  <p><a href="{{ url_for('support.index') }}">&larr; Support access</a></p>
+  <h1><i class="fas fa-shield-halved"></i> Two-factor authentication</h1>
+  <p>Support access needs a fresh authenticator code every time you log in to an instance.</p>
+</div>
+<div class="card" style="max-width:640px;">
+  {% if enabled %}
+    <p style="color:var(--success);font-weight:700;"><i class="fas fa-check-circle"></i> 2FA is already enabled on your account.</p>
+  {% else %}
+  <div id="step1"><p style="margin-bottom:1rem;">Scan a QR code with your authenticator app, then confirm with a code.</p>
+    <button id="start" class="btn btn-primary" type="button">Start setup</button></div>
+  <div id="step2" style="display:none;">
+    <img id="qr" alt="2FA QR code" style="width:200px;height:200px;image-rendering:pixelated;"/>
+    <p style="margin:1rem 0 .25rem;">Or enter this key manually:</p><code id="secret" style="word-break:break-all;"></code>
+    <form id="verify" style="margin-top:1.5rem;">
+      <div class="form-group"><label for="token">6-digit code</label>
+        <input type="text" id="token" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required></div>
+      <button class="btn btn-primary">Confirm and enable</button>
+    </form>
+  </div>
+  <div id="done" style="display:none;"><p style="color:var(--success);font-weight:700;"><i class="fas fa-check-circle"></i> 2FA enabled.</p>
+    <p style="margin:1rem 0 .5rem;">Save these backup codes somewhere safe (each works once):</p><pre id="codes"></pre>
+    <a class="btn btn-primary" href="{{ url_for('support.index') }}">Back to support access</a></div>
+  <p id="err" style="color:var(--danger);margin-top:1rem;"></p>
+  {% endif %}
+</div>
+<script>
+const csrf = "{{ csrf_token() }}", $ = id => document.getElementById(id);
+$("start")?.addEventListener("click", async () => {
+  const r = await fetch("/api/user/2fa/setup", {credentials: "same-origin"}), d = await r.json();
+  if (!r.ok) { $("err").textContent = d.error || "Setup failed"; return; }
+  $("qr").src = "data:image/png;base64," + d.qr_code; $("secret").textContent = d.secret;
+  $("step1").style.display = "none"; $("step2").style.display = "block";
+});
+$("verify")?.addEventListener("submit", async e => {
+  e.preventDefault();
+  const r = await fetch("/api/user/2fa/verify", {method: "POST", credentials: "same-origin",
+    headers: {"Content-Type": "application/json", "X-CSRFToken": csrf}, body: JSON.stringify({token: $("token").value})});
+  const d = await r.json();
+  if (!r.ok) { $("err").textContent = d.error || "Invalid code"; return; }
+  $("codes").textContent = (d.backup_codes || []).join("\n");
+  $("step2").style.display = "none"; $("done").style.display = "block"; $("err").textContent = "";
+});
+</script>
+{% endblock %}

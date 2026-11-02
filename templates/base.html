@@ -245,6 +245,12 @@
            {% if request.endpoint in ['organizations_list','add_organization','edit_organization'] %}class="active"{% endif %}>
           <i class="fas fa-building"></i> Instances
         </a>
+        {% if session.role == 'admin' %}
+        <a href="{{ url_for('support.index') }}"
+           {% if request.endpoint and request.endpoint.startswith('support.') %}class="active"{% endif %}>
+          <i class="fas fa-life-ring"></i> Support
+        </a>
+        {% endif %}
         <a href="{{ url_for('logs_list') }}"
            {% if request.endpoint == 'logs_list' %}class="active"{% endif %}>
           <i class="fas fa-clipboard-list"></i> Logs

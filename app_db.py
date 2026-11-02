@@ -60,6 +60,10 @@ from auth import (
 
 db.init_app(app)
 
+# Support access portal (log in to customer instances for support)
+from support_admin import init_support_admin
+init_support_admin(app, limiter)
+
 oauth, google_oauth, github_oauth = None, None, None
 try:
     oauth, google_oauth, github_oauth = setup_oauth(app)

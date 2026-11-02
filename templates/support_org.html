@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Support: {{ org.name }} - ShowWise Backend{% endblock %}
+{% block content %}
+<div class="page-header">
+  <p><a href="{{ url_for('support.index') }}">&larr; All instances</a></p>
+  <h1><i class="fas fa-life-ring"></i> {{ org.name }}</h1>
+  <p><code>{{ org.slug }}</code> &middot; {{ org.url or 'no URL set' }}</p>
+</div>
+
+<div class="card" style="margin-bottom:2rem;max-width:800px;">
+  <h2 style="margin-bottom:1rem;">Support login</h2>
+  {% if not url_ok %}
+    <p style="color:var(--danger);">This organization needs a valid <code>https://</code> URL before you can log in. <a href="{{ url_for('edit_organization', slug=org.slug) }}">Edit organization</a></p>
+  {% elif not enabled %}
+    <p style="color:var(--danger);">Support access is disabled for this organization.</p>
+  {% elif need_2fa and not me.is_2fa_enabled %}
+    <p style="color:var(--danger);">Turn on 2FA for your account to use support access. <a href="{{ url_for('support.twofa_page') }}">Set up 2FA</a></p>
+  {% else %}
+  <form method="POST" action="{{ url_for('support.login_to_org', slug=org.slug) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.25rem;">
+      <div class="form-group"><label for="scope">Access</label>
+        <select id="scope" name="scope"><option value="readonly">Read-only</option><option value="admin">Admin (can change things)</option></select></div>
+      <div class="form-group"><label for="minutes">Token valid for</label>
+        <select id="minutes" name="minutes">{% for m in minutes %}<option value="{{ m }}" {% if m == 10 %}selected{% endif %}>{{ m }} min</option>{% endfor %}</select></div>
+      <div class="form-group" style="grid-column:1/-1;"><label for="reason">Reason</label>
+        <input type="text" id="reason" name="reason" required minlength="3" maxlength="200" placeholder="Ticket or what you are fixing"></div>
+      {% if need_2fa %}
+      <div class="form-group"><label for="totp">2FA code</label>
+        <input type="text" id="totp" name="totp" required inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="123456"></div>
+      {% endif %}
+    </div>
+    <button class="btn btn-primary"><i class="fas fa-right-to-bracket"></i> Log in to {{ org.name }}</button>
+    <p style="color:var(--gray-600);font-size:.9rem;margin-top:1rem;">Opens the instance in this browser. The session is time-limited, shows a red banner and is logged on the instance and here.</p>
+  </form>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-bottom:2rem;max-width:800px;">
+  <h2 style="margin-bottom:1rem;">Instance setup</h2>
+  <p>Put this in the instance's environment (once). Until then <code>/support/login</code> returns 404 there.</p>
+  <pre style="background:var(--gray-100);padding:1rem;border-radius:8px;margin-top:1rem;overflow-x:auto;white-space:pre-wrap;word-break:break-all;">SUPPORT_PUBLIC_KEY={{ env }}
+SUPPORT_INSTANCE_ID={{ org.slug }}
+SUPPORT_TRUST_PROXY_HEADERS=1</pre>
+  <form method="POST" action="{{ url_for('support.toggle_org', slug=org.slug) }}" style="margin-top:1rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <button class="btn {{ 'btn-danger' if enabled else 'btn-success' }}">{{ 'Disable support access' if enabled else 'Enable support access' }}</button>
+  </form>
+</div>
+
+<div class="card" style="max-width:800px;">
+  <h2 style="margin-bottom:1rem;">Recent logins</h2>
+  {% include "_support_log.html" %}
+</div>
+{% endblock %}
