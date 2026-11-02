@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import serialization as ser
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for, jsonify
 from sqlalchemy import func
 
 from auth import admin_required, lock_account, log_security_event, login_required
@@ -271,8 +271,43 @@ def key_revoke(kid):
     return redirect(url_for("support.index"))
 
 
+
+def _api_user_2fa_setup():
+    """Start TOTP setup for the signed-in admin and return a QR code plus secret."""
+    user = User.query.get(session.get("user_id"))
+    if user is None or not user.is_active or user.role != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+    if user.is_2fa_enabled:
+        return jsonify({"error": "2FA is already enabled"}), 409
+    secret, _backup_codes = user.enable_totp()
+    db.session.commit()
+    return jsonify({"secret": secret, "qr_code": user.get_totp_qr_code()})
+
+
+def _api_user_2fa_verify():
+    """Verify the first TOTP code before enabling 2FA and exposing backup codes."""
+    user = User.query.get(session.get("user_id"))
+    if user is None or not user.is_active or user.role != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+    if user.is_2fa_enabled:
+        return jsonify({"error": "2FA is already enabled"}), 409
+    data = request.get_json(silent=True) or {}
+    token = str(data.get("token", "")).replace(" ", "").replace("-", "")
+    if not user.verify_totp(token):
+        return jsonify({"error": "Invalid authenticator code"}), 400
+    user.is_2fa_enabled = True
+    db.session.commit()
+    log_security_event("2fa_enabled", "Two-factor authentication enabled", "info", user_id=user.id)
+    return jsonify({"success": True, "backup_codes": user.backup_codes or []})
+
+
+
 def init_support_admin(app, limiter=None):
     app.register_blueprint(support_bp)
+    app.add_url_rule("/api/user/2fa/setup", endpoint="support_2fa_setup_api",
+                     view_func=login_required(_api_user_2fa_setup), methods=["GET"])
+    app.add_url_rule("/api/user/2fa/verify", endpoint="support_2fa_verify_api",
+                     view_func=login_required(_api_user_2fa_verify), methods=["POST"])
     if limiter is not None:  # minting is also rate limited per IP
         ep = "support.login_to_org"
         app.view_functions[ep] = limiter.limit("20 per hour")(app.view_functions[ep])
