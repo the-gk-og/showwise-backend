@@ -1,16 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Error - ShowWise{% endblock %}
+{% block title %}{{ error_code }} - ShowWise Backend{% endblock %}
 {% block content %}
-<div style="max-width: 600px; margin: 4rem auto;">
-  <div class="card" style="text-align: center; padding: 3rem;">
-    <div style="font-size: 4rem; color: var(--danger); margin-bottom: 1rem;">
-      <i class="fas fa-exclamation-circle"></i>
-    </div>
-    <h1 style="font-size: 3rem; font-weight: 900; margin-bottom: 0.5rem;">{{ error_code }}</h1>
-    <p style="font-size: 1.2rem; color: var(--gray-600); margin-bottom: 2rem;">{{ message }}</p>
-    <a href="{{ url_for('login') }}" class="btn btn-primary">
-      <i class="fas fa-home"></i> Back to Home
-    </a>
-  </div>
+<div class="error-page">
+  <div class="code">{{ error_code }}</div>
+  <h1>{{ message }}</h1>
+  <p class="muted" style="margin-bottom:18px;">
+    {% if error_code == 429 %}Too many requests came from your address in a short time.
+    {% elif error_code == 400 %}Reloading the page usually fixes this.
+    {% elif error_code == 403 %}Your account does not have access to this page.
+    {% elif error_code == 404 %}Check the address, or head back to the overview.
+    {% else %}The error has been logged. Try again in a moment.{% endif %}
+  </p>
+  <a href="{{ url_for('dashboard') if nav_user else url_for('login') }}" class="btn">{{ 'Back to overview' if nav_user else 'Back to sign in' }}</a>
 </div>
 {% endblock %}

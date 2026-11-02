@@ -7,23 +7,37 @@ from flask_cors import CORS
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
-import json, os, secrets, ipaddress, socket, time
-from urllib.parse import urlparse
+import os, secrets, time
 from datetime import datetime, timedelta
-import requests
 
 load_dotenv()
 
 app = Flask(__name__)
 APP_STARTED_AT = time.monotonic()
-app.secret_key = os.getenv('SECRET_KEY', 'fallback-secret-key-change-in-production')
+
+_secret = os.getenv('SECRET_KEY', '').strip()
+_placeholders = {'', 'your-super-secret-key-here-change-this-in-production', 'fallback-secret-key-change-in-production'}
+if _secret in _placeholders:
+    if os.getenv('FLASK_ENV') == 'production':
+        raise RuntimeError('SECRET_KEY is not set. Generate one with: '
+                           'python -c "import secrets; print(secrets.token_urlsafe(32))"')
+    _secret = secrets.token_urlsafe(32)  # dev only: sessions reset on restart
+    print('! SECRET_KEY not set: using a temporary key (sessions will reset on restart)')
+app.secret_key = _secret
+
+# Behind Cloudflare Tunnel / nginx / Tailscale Funnel set TRUSTED_PROXY_HOPS=1 (number of proxies that
+# append to X-Forwarded-For). Without it every visitor looks like the proxy and shares one rate-limit bucket.
+_hops = int(os.getenv('TRUSTED_PROXY_HOPS', '0') or 0)
+if _hops > 0:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=_hops, x_proto=_hops, x_host=_hops)
 
 app.config.update(
     SESSION_COOKIE_SECURE=os.getenv('FLASK_ENV') == 'production',
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
-    PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=int(os.getenv('SESSION_TIMEOUT', 12))),
     SESSION_REFRESH_EACH_REQUEST=True,
     SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL', 'sqlite:///showwise.db'),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
@@ -31,7 +45,7 @@ app.config.update(
     GOOGLE_CLIENT_SECRET=os.getenv('GOOGLE_CLIENT_SECRET'),
     GITHUB_CLIENT_ID=os.getenv('GITHUB_CLIENT_ID'),
     GITHUB_CLIENT_SECRET=os.getenv('GITHUB_CLIENT_SECRET'),
-    WTF_CSRF_TIME_LIMIT=3600,
+    WTF_CSRF_TIME_LIMIT=None,  # a login page left open overnight should still submit; the session still binds the token
 )
 
 csrf = CSRFProtect(app)
@@ -39,7 +53,8 @@ csrf = CSRFProtect(app)
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
+    default_limits=["2000 per day", "400 per hour"],
+    default_limits_exempt_when=lambda: request.endpoint == 'static',
     storage_uri="memory://"
 )
 
@@ -58,7 +73,8 @@ from auth import (
     login_required, admin_required, require_2fa,
     get_client_ip, get_user_agent, log_security_event,
     is_account_locked, lock_account, unlock_account,
-    verify_totp_token, reset_login_attempts, setup_oauth
+    verify_second_factor, reset_login_attempts, setup_oauth,
+    start_session, begin_pending_2fa, pending_2fa_user,
 )
 
 db.init_app(app)
@@ -66,6 +82,10 @@ db.init_app(app)
 # Support access portal (log in to customer instances for support)
 from support_admin import init_support_admin
 init_support_admin(app, limiter)
+
+# Self-service 2FA (enrol, disable, backup codes) at /account/security
+from account_security import init_account_security
+init_account_security(app, limiter)
 
 oauth, google_oauth, github_oauth = None, None, None
 try:
@@ -79,7 +99,7 @@ except Exception as e:
 # =============================================================================
 
 @app.route('/login', methods=['GET', 'POST'])
-@limiter.limit("10 per minute")
+@limiter.limit("20 per minute", methods=["POST"])
 def login():
     if 'user_id' in session:
         return redirect(url_for('dashboard'))
@@ -89,69 +109,70 @@ def login():
         password = request.form.get('password', '')
 
         if not username or not password:
-            flash('Username and password required', 'error')
+            flash('Enter your username and password.', 'error')
             return redirect(url_for('login'))
 
         user = User.query.filter_by(username=username).first()
 
         if user and is_account_locked(user):
-            remaining = (user.locked_until - datetime.utcnow()).total_seconds()
-            flash(f'Account locked. Try again in {int(remaining)} seconds.', 'warning')
-            log_security_event('login_locked', f'Locked account login attempt: {username}', 'warning')
+            remaining = max(1, int((user.locked_until - datetime.utcnow()).total_seconds() // 60) + 1)
+            flash(f'This account is locked after too many failed attempts. Try again in about {remaining} min.', 'warning')
+            log_security_event('login_locked', f'Locked account login attempt: {username}', 'warning', user_id=user.id)
             return redirect(url_for('login'))
 
-        if user and user.check_password(password) and user.is_active:
+        if user and user.is_active and user.check_password(password):
             if user.is_2fa_enabled:
-                session['pending_2fa_user'] = user.id
-                flash('Enter your 2FA code', 'info')
+                begin_pending_2fa(user)
                 return redirect(url_for('verify_2fa'))
             reset_login_attempts(user)
-            session['username'] = user.username
-            session['user_id'] = user.id
-            session['role'] = user.role
-            session.permanent = True
+            start_session(user)
             log_security_event('login_success', f'User logged in: {username}', 'info', user_id=user.id)
-            flash(f'Welcome back, {username}!', 'success')
             return redirect(url_for('dashboard'))
 
         if user:
             lock_account(user)
             log_security_event('login_failed', f'Failed login: {username}', 'warning', user_id=user.id)
-        flash('Invalid credentials', 'error')
+        else:
+            log_security_event('login_failed', f'Failed login for unknown user: {username[:80]}', 'warning')
+        flash('That username and password do not match.', 'error')
         return redirect(url_for('login'))
 
     return render_template('login.html')
 
 
 @app.route('/verify-2fa', methods=['GET', 'POST'])
+@limiter.limit("15 per minute", methods=["POST"])  # page loads are not counted; the account lockout is the real brute-force guard
 @require_2fa
-@limiter.limit("5 per minute")
 def verify_2fa():
-    user_id = session.get('pending_2fa_user')
-    user = User.query.get(user_id) if user_id else None
+    user = pending_2fa_user()
 
-    if not user:
-        flash('Session expired', 'error')
+    if is_account_locked(user):
+        session.pop('pending_2fa_user', None)
+        session.pop('pending_2fa_at', None)
+        flash('This account is locked after too many failed attempts. Try again later.', 'warning')
         return redirect(url_for('login'))
 
     if request.method == 'POST':
-        token = request.form.get('token', '').replace(' ', '').replace('-', '')
-        use_backup = request.form.get('use_backup') == 'on'
+        code = request.form.get('token', '')
+        ok, reason = verify_second_factor(user, code)
 
-        if verify_totp_token(user, token, use_backup):
+        if ok:
             reset_login_attempts(user)
-            session['username'] = user.username
-            session['user_id'] = user.id
-            session['role'] = user.role
-            session.permanent = True
-            session.pop('pending_2fa_user', None)
+            start_session(user)
             log_security_event('login_2fa_success', f'2FA verified: {user.username}', 'info', user_id=user.id)
-            flash('Logged in successfully!', 'success')
             return redirect(url_for('dashboard'))
 
         lock_account(user)
-        flash('Invalid 2FA code', 'error')
-        log_security_event('login_2fa_failed', f'Invalid 2FA: {user.username}', 'warning', user_id=user.id)
+        log_security_event('login_2fa_failed', f'Invalid 2FA ({reason}): {user.username}', 'warning', user_id=user.id)
+        if is_account_locked(user):
+            session.pop('pending_2fa_user', None)
+            session.pop('pending_2fa_at', None)
+            flash('Too many wrong codes. This account is locked for a while.', 'warning')
+            return redirect(url_for('login'))
+        if reason == 'reused':
+            flash('That code was already used. Wait for your app to show the next one.', 'error')
+        else:
+            flash('That code is not valid. Check the code for ShowWise and try again.', 'error')
         return redirect(url_for('verify_2fa'))
 
     return render_template('verify_2fa.html')
@@ -232,20 +253,51 @@ def oauth_callback(provider):
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    from models import Setting
+    from support_admin import DISABLED_KEY
     user = User.query.get(session['user_id'])
-    total_orgs = Organization.query.count()
-    active_orgs = Organization.query.filter_by(is_active=True).count()
-    inactive_orgs = total_orgs - active_orgs
+    since = datetime.utcnow() - timedelta(hours=24)
+
+    orgs = Organization.query.order_by(Organization.name).all()
+    kill_on = {ks.organization_id for ks in KillSwitch.query.filter_by(is_enabled=True)}
+    support_off = {st.organization_id for st in Setting.query.filter_by(key=DISABLED_KEY, value='1')}
+    last_support = dict(db.session.query(Log.organization_id, db.func.max(Log.created_at))
+                        .filter(Log.log_type == 'support_login').group_by(Log.organization_id).all())
+
+    instances = [{
+        'slug': o.slug, 'name': o.name, 'url': o.url or '', 'active': o.is_active,
+        'color': o.primary_color or '#0051ff', 'logo': o.logo or '',
+        'kill': o.id in kill_on, 'support_off': o.id in support_off,
+        'last_support': last_support.get(o.id),
+    } for o in orgs]
 
     stats = {
-        'total_organizations': total_orgs,
-        'active_organizations': active_orgs,
-        'inactive_organizations': inactive_orgs,
+        'total_organizations': len(orgs),
+        'active_organizations': sum(1 for o in orgs if o.is_active),
+        'inactive_organizations': sum(1 for o in orgs if not o.is_active),
+        'kill_switches_on': len(kill_on),
+        'locked_accounts': User.query.filter(User.locked_until > datetime.utcnow()).count(),
+        'failed_logins_24h': Log.query.filter(Log.log_type.in_(('login_failed', 'login_2fa_failed')),
+                                              Log.created_at >= since).count(),
+        'support_logins_24h': Log.query.filter(Log.log_type == 'support_login', Log.created_at >= since).count(),
+        'users_without_2fa': User.query.filter_by(role='admin', is_active=True, is_2fa_enabled=False).count(),
     }
-    return render_template('dashboard.html',
-                           username=user.username,
-                           role=user.role,
-                           stats=stats)
+    activity = Log.query.filter(Log.log_type != 'logout').order_by(Log.created_at.desc()).limit(12).all()
+    return render_template('dashboard.html', username=user.username, role=user.role, user=user,
+                           stats=stats, instances=instances, activity=activity)
+
+
+@app.route('/api/admin/instances/<slug>/health')
+@login_required
+@admin_required
+@limiter.limit("120 per minute")
+def api_instance_health(slug):
+    """JSON health of one instance; the dashboard and uptime pages call this per instance so pages load instantly."""
+    from instance_checks import instance_health
+    org = Organization.query.filter_by(slug=slug).first_or_404()
+    resp = jsonify(instance_health(org.url))
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
 
 
 # =============================================================================
@@ -332,7 +384,7 @@ def edit_organization(slug):
     return render_template('edit_organization.html', org=_org_to_template_dict(org), slug=slug)
 
 
-@app.route('/organizations/<slug>/toggle')
+@app.route('/organizations/<slug>/toggle', methods=['POST'])
 @login_required
 @admin_required
 def toggle_organization(slug):
@@ -348,7 +400,7 @@ def toggle_organization(slug):
     return redirect(url_for('organizations_list'))
 
 
-@app.route('/organizations/<slug>/delete')
+@app.route('/organizations/<slug>/delete', methods=['POST'])
 @login_required
 @admin_required
 def delete_organization(slug):
@@ -410,7 +462,7 @@ def kill_switches_list():
     return render_template('kill_switches.html', organizations=orgs_dict, kill_switches=ks_dict)
 
 
-@app.route('/kill-switches/<org_slug>/toggle')
+@app.route('/kill-switches/<org_slug>/toggle', methods=['POST'])
 @login_required
 @admin_required
 def toggle_kill_switch(org_slug):
@@ -422,6 +474,8 @@ def toggle_kill_switch(org_slug):
 
     ks.is_enabled = not ks.is_enabled
     user = User.query.get(session['user_id'])
+    if ks.is_enabled and request.form.get('reason') is not None:
+        ks.reason = request.form.get('reason', '').strip()[:255]
     if ks.is_enabled:
         ks.enabled_at = datetime.utcnow()
         ks.enabled_by = user.username
@@ -529,7 +583,8 @@ def logs_list():
 @admin_required
 def users_list():
     users = User.query.order_by(User.created_at.desc()).all()
-    return render_template('users.html', users=users, current_user_id=session.get('user_id'))
+    return render_template('users.html', users=users, current_user_id=session.get('user_id'),
+                           now=datetime.utcnow())
 
 
 @app.route('/users/<int:user_id>/toggle', methods=['POST'])
@@ -560,39 +615,6 @@ def unlock_user(user_id):
     return redirect(url_for('users_list'))
 
 
-def _instance_health(org):
-    """Check an explicitly configured public HTTPS health endpoint with a short timeout."""
-    raw_url = (org.url or '').strip()
-    parsed = urlparse(raw_url)
-    if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password:
-        return {'status': 'unknown', 'detail': 'A valid HTTPS URL is required', 'latency_ms': None}
-    try:
-        addresses = socket.getaddrinfo(parsed.hostname, parsed.port or 443, type=socket.SOCK_STREAM)
-        if not addresses:
-            raise OSError('No DNS addresses')
-        for address in addresses:
-            ip = ipaddress.ip_address(address[4][0])
-            if not ip.is_global:
-                return {'status': 'blocked', 'detail': 'URL resolves to a non-public address', 'latency_ms': None}
-        start = time.monotonic()
-        response = requests.get(raw_url.rstrip('/') + '/api/health', timeout=3,
-                                allow_redirects=False, headers={'User-Agent': 'ShowWise-Uptime-Check/1.0'})
-        latency = round((time.monotonic() - start) * 1000)
-        if response.status_code == 200:
-            try:
-                payload = response.json()
-                healthy = payload.get('status') == 'ok'
-            except (ValueError, AttributeError):
-                healthy = False
-            return {'status': 'up' if healthy else 'degraded',
-                    'detail': f'HTTP {response.status_code}', 'latency_ms': latency}
-        return {'status': 'degraded', 'detail': f'HTTP {response.status_code}', 'latency_ms': latency}
-    except requests.RequestException as exc:
-        return {'status': 'down', 'detail': type(exc).__name__, 'latency_ms': None}
-    except (OSError, ValueError) as exc:
-        return {'status': 'down', 'detail': type(exc).__name__, 'latency_ms': None}
-
-
 @app.route('/uptime')
 @login_required
 @admin_required
@@ -603,13 +625,10 @@ def uptime_dashboard():
     except Exception:
         db.session.rollback()
         database_ok = False
-    instances = []
-    for org in Organization.query.order_by(Organization.name).all():
-        health = _instance_health(org)
-        instances.append({'org': org, **health})
-    return render_template('uptime.html', instances=instances, database_ok=database_ok,
-                           uptime_seconds=max(0, int(time.monotonic() - APP_STARTED_AT)),
-                           checked_at=datetime.utcnow())
+    orgs = Organization.query.order_by(Organization.name).all()
+    return render_template('uptime.html', orgs=orgs, database_ok=database_ok,
+                           uptime_seconds=max(0, int(time.monotonic() - APP_STARTED_AT)))
+
 
 # =============================================================================
 # ERROR HANDLERS
@@ -630,7 +649,21 @@ def forbidden(error):
 
 @app.errorhandler(429)
 def rate_limited(error):
-    return jsonify({'error': 'Rate limit exceeded. Please slow down.'}), 429
+    message = 'Too many requests. Wait a minute, then try again.'
+    if request.path.startswith('/api/') or request.is_json:
+        return jsonify({'error': message}), 429
+    return render_template('error.html', error_code=429, message=message), 429
+
+@app.errorhandler(400)
+def bad_request(error):
+    description = getattr(error, 'description', '') or ''
+    if 'CSRF' in description:
+        message = 'This page expired. Go back, reload it and try again.'
+    else:
+        message = 'The request could not be understood.'
+    if request.path.startswith('/api/') or request.is_json:
+        return jsonify({'error': message}), 400
+    return render_template('error.html', error_code=400, message=message), 400
 
 
 # =============================================================================
@@ -641,7 +674,29 @@ def rate_limited(error):
 def before_request():
     if 'username' in session:
         session.permanent = True
-        app.permanent_session_lifetime = timedelta(hours=12)
+
+
+@app.after_request
+def security_headers(resp):
+    resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    resp.headers.setdefault('X-Frame-Options', 'DENY')
+    resp.headers.setdefault('Referrer-Policy', 'same-origin')
+    resp.headers.setdefault('Content-Security-Policy', "frame-ancestors 'none'; base-uri 'self'; object-src 'none'")
+    if 'user_id' in session and request.endpoint != 'static':
+        resp.headers['Cache-Control'] = 'no-store'  # admin pages must not sit in a shared browser cache
+    return resp
+
+
+@app.context_processor
+def inject_nav_user():
+    """Gives base.html the signed-in person for the side rail (name, role, whether 2FA is on)."""
+    uid = session.get('user_id')
+    if not uid:
+        return {'nav_user': None}
+    user = db.session.get(User, uid)
+    if not user:
+        return {'nav_user': None}
+    return {'nav_user': {'username': user.username, 'role': user.role, 'twofa': bool(user.is_2fa_enabled)}}
 
 
 @app.teardown_appcontext
@@ -649,23 +704,39 @@ def shutdown_session(exception=None):
     db.session.remove()
 
 
+def ensure_schema():
+    """Add columns introduced after a database was first created (create_all never alters tables)."""
+    inspector = db.inspect(db.engine)
+    if 'users' in inspector.get_table_names():
+        columns = {c['name'] for c in inspector.get_columns('users')}
+        if 'totp_last_step' not in columns:
+            db.session.execute(db.text('ALTER TABLE users ADD COLUMN totp_last_step INTEGER'))
+            db.session.commit()
+
+
 def init_db():
-    """Initialize database with default admin and demo org."""
+    """Create tables, add new columns, and make a first admin plus a demo org when the database is empty."""
     with app.app_context():
         db.create_all()
+        ensure_schema()
 
         if User.query.count() == 0:
+            initial_password = os.getenv('ADMIN_INITIAL_PASSWORD') or secrets.token_urlsafe(14)
             admin = User(
                 username='admin',
                 email='admin@showwise.local',
                 role='admin',
                 is_active=True,
             )
-            admin.set_password('Admin123456!')
+            admin.set_password(initial_password)
             db.session.add(admin)
             db.session.commit()
-            print("✓ Default admin created (username: admin, password: Admin123456!)")
-            print("  ⚠ Change this password immediately after first login!")
+            print('✓ First admin created')
+            print('  username: admin')
+            if os.getenv('ADMIN_INITIAL_PASSWORD'):
+                print('  password: the value of ADMIN_INITIAL_PASSWORD')
+            else:
+                print(f'  password: {initial_password}   (shown once: sign in and set up 2FA at /account/security)')
 
         if Organization.query.count() == 0:
             demo_org = Organization(
@@ -683,15 +754,61 @@ def init_db():
             ks = KillSwitch(organization_id=demo_org.id, is_enabled=False)
             db.session.add(ks)
             db.session.commit()
-            print("✓ Demo organization created")
+            print('✓ Demo organization created')
 
-        print("✓ Database initialized")
+        print('✓ Database initialized')
+
+
+# ---- Recovery commands (run on the server) -----------------------------------------------------
+#   flask --app app_db reset-2fa <username>      turn 2FA off for someone locked out of their authenticator
+#   flask --app app_db unlock <username>         clear a login lockout
+#   flask --app app_db set-password <username>   set a new password (prompts, hidden)
+import click
+
+
+@app.cli.command('reset-2fa')
+@click.argument('username')
+def cli_reset_2fa(username):
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        raise click.ClickException(f'No user named {username!r}')
+    user.disable_totp()
+    unlock_account(user)
+    db.session.commit()
+    log_security_event('2fa_reset_cli', f'2FA reset from the command line for {username}', 'warning', user_id=user.id)
+    click.echo(f'2FA is off for {username}. Sign in, then turn it on again at /account/security.')
+
+
+@app.cli.command('unlock')
+@click.argument('username')
+def cli_unlock(username):
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        raise click.ClickException(f'No user named {username!r}')
+    unlock_account(user)
+    click.echo(f'Lockout cleared for {username}.')
+
+
+@app.cli.command('set-password')
+@click.argument('username')
+@click.option('--password', prompt=True, hide_input=True, confirmation_prompt=True)
+def cli_set_password(username, password):
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        raise click.ClickException(f'No user named {username!r}')
+    try:
+        user.set_password(password)
+    except ValueError as exc:
+        raise click.ClickException(str(exc))
+    unlock_account(user)
+    db.session.commit()
+    click.echo(f'Password updated for {username}.')
 
 
 if __name__ == '__main__':
     init_db()
     app.run(
-        host='0.0.0.0',
+        host=os.getenv('HOST', '0.0.0.0'),
         port=int(os.getenv('PORT', 5000)),
         debug=os.getenv('FLASK_ENV') == 'development',
     )

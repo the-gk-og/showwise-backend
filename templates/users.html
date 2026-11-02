@@ -1,14 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Users - ShowWise Backend{% endblock %}
 {% block content %}
-<div class="page-header"><h1><i class="fas fa-users"></i> Users</h1><p>Review accounts, account status, two-factor authentication and login lockouts.</p></div>
-<div class="card"><div class="table-container"><table><thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>2FA</th><th>Created</th><th>Actions</th></tr></thead><tbody>
-{% for user in users %}<tr>
-<td><strong>{{ user.username }}</strong>{% if user.id == current_user_id %} <small>(you)</small>{% endif %}</td><td>{{ user.email }}</td><td>{{ user.role }}</td>
-<td>{{ 'Active' if user.is_active else 'Inactive' }}{% if user.locked_until %}<br><small>Lockout until {{ user.locked_until|sfmt }}</small>{% endif %}</td>
-<td>{{ 'Enabled' if user.is_2fa_enabled else 'Not enabled' }}</td><td>{{ user.created_at|sfmt }}</td><td style="min-width:180px;">
-{% if user.id != current_user_id %}<form method="POST" action="{{ url_for('toggle_user', user_id=user.id) }}" style="display:inline;"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn {{ 'btn-danger' if user.is_active else 'btn-success' }}" type="submit">{{ 'Deactivate' if user.is_active else 'Activate' }}</button></form>{% endif %}
-{% if user.locked_until or user.login_attempts %}<form method="POST" action="{{ url_for('unlock_user', user_id=user.id) }}" style="display:inline;margin-top:.4rem;"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-secondary" type="submit">Clear lockout</button></form>{% endif %}
-</td></tr>{% else %}<tr><td colspan="7">No users found.</td></tr>{% endfor %}
-</tbody></table></div></div>
+<div class="page-head"><div><h1>Users</h1><p>Accounts, whether two-factor authentication is on, and sign-in lockouts.</p></div></div>
+<div class="panel flush"><div class="panel-body table-wrap">
+  <table class="tbl">
+    <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>State</th><th>2FA</th><th>Last sign-in</th><th></th></tr></thead>
+    <tbody>
+    {% for user in users %}
+      <tr>
+        <td><strong>{{ user.username }}</strong>{% if user.id == current_user_id %} <span class="chip info">You</span>{% endif %}</td>
+        <td class="muted wrap-any">{{ user.email }}</td>
+        <td>{{ user.role|capitalize }}</td>
+        <td>
+          {% if not user.is_active %}<span class="chip">Inactive</span>
+          {% elif user.locked_until and user.locked_until > now %}<span class="chip down">Locked</span><div class="muted small" style="margin-top:3px;">until {{ user.locked_until|sfmt }}</div>
+          {% else %}<span class="chip up">Active</span>{% endif %}
+        </td>
+        <td>{% if user.is_2fa_enabled %}<span class="chip up">On</span>{% else %}<span class="chip {{ 'warn' if user.role == 'admin' else '' }}">Off</span>{% endif %}</td>
+        <td class="muted small nowrap">{{ user.last_login|sfmt }}</td>
+        <td class="actions">
+          {% if user.locked_until or user.login_attempts %}
+          <form class="inline-form" method="POST" action="{{ url_for('unlock_user', user_id=user.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Clear lockout</button></form>
+          {% endif %}
+          {% if user.id != current_user_id %}
+          <form class="inline-form" method="POST" action="{{ url_for('toggle_user', user_id=user.id) }}" data-confirm="{{ 'Deactivate' if user.is_active else 'Activate' }} {{ user.username }}?"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm {{ 'btn-danger' if user.is_active else 'btn-good' }}" type="submit">{{ 'Deactivate' if user.is_active else 'Activate' }}</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="muted" style="padding:28px 16px;text-align:center;">No users found.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div></div>
 {% endblock %}

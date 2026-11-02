@@ -1,108 +1,37 @@
 {% extends "base.html" %}
 {% block title %}Edit {{ org.name }} - ShowWise Backend{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h1><i class="fas fa-edit"></i> Edit Organization</h1>
-  <p>Update settings for {{ org.name }}</p>
+<div class="page-head">
+  <div><a class="back" href="{{ url_for('organizations_list') }}">&larr; Instances</a><h1>{{ org.name }}</h1>
+  <p>Created {{ org.created_at[:10] if org.created_at else 'unknown' }}, last changed {{ org.updated_at[:10] if org.updated_at else 'unknown' }}.</p></div>
+  <div class="page-actions"><a class="btn" href="{{ url_for('support.org_page', slug=slug) }}">Support access</a></div>
 </div>
 
-<div style="max-width:800px;">
-  <div class="card">
-    <form method="POST" action="{{ url_for('edit_organization', slug=slug) }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem;">
-
-        <div class="form-group" style="grid-column:1/-1;">
-          <label><i class="fas fa-key"></i> Slug</label>
-          <input type="text" value="{{ slug }}" disabled style="background:var(--gray-100);cursor:not-allowed;">
-          <small style="color:var(--gray-600);font-size:0.85rem;display:block;margin-top:0.5rem;">Slug cannot be changed after creation</small>
-        </div>
-
-        <div class="form-group">
-          <label for="name"><i class="fas fa-building"></i> Organization Name *</label>
-          <input type="text" id="name" name="name" value="{{ org.name }}" required placeholder="Demo Organization">
-        </div>
-
-        <div class="form-group">
-          <label for="subdomain"><i class="fas fa-globe"></i> Subdomain</label>
-          <input type="text" id="subdomain" name="subdomain" value="{{ org.subdomain }}" placeholder="demo">
-        </div>
-
-        <div class="form-group" style="grid-column:1/-1;">
-          <label for="url"><i class="fas fa-link"></i> Full URL</label>
-          <input type="url" id="url" name="url" value="{{ org.url }}" placeholder="https://demo.example.com">
-        </div>
-
-        <div class="form-group" style="grid-column:1/-1;">
-          <label for="logo"><i class="fas fa-image"></i> Logo URL</label>
-          <input type="url" id="logo" name="logo" value="{{ org.logo }}" placeholder="https://example.com/logo.svg">
-        </div>
-
-        <div class="form-group">
-          <label for="logo_size"><i class="fas fa-expand"></i> Logo Size</label>
-          <select id="logo_size" name="logo_size">
-            {% for val, label in [('contain','Contain (fit)'),('cover','Cover (fill)'),('80%','80%'),('60%','60%')] %}
-            <option value="{{ val }}" {% if org.logo_size == val %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="logo_padding"><i class="fas fa-border-style"></i> Logo Padding</label>
-          <select id="logo_padding" name="logo_padding">
-            {% for val, label in [('0px','None (0px)'),('8px','Small (8px)'),('12px','Medium (12px)'),('20px','Large (20px)')] %}
-            <option value="{{ val }}" {% if org.logo_padding == val %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="primary_color"><i class="fas fa-palette"></i> Primary Color</label>
-          <input type="text" id="primary_color" name="primary_color" value="{{ org.primary_color }}" placeholder="#0051ff">
-        </div>
-
-        <div class="form-group">
-          <label for="secondary_color"><i class="fas fa-palette"></i> Secondary Color</label>
-          <input type="text" id="secondary_color" name="secondary_color" value="{{ org.secondary_color }}" placeholder="#898989">
-        </div>
-
-        <div class="form-group" style="grid-column:1/-1;">
-          <label for="description"><i class="fas fa-align-left"></i> Description</label>
-          <textarea id="description" name="description" placeholder="Brief description">{{ org.description }}</textarea>
-        </div>
-
-        <div class="form-group" style="grid-column:1/-1;">
-          <label for="website"><i class="fas fa-external-link-alt"></i> Website</label>
-          <input type="url" id="website" name="website" value="{{ org.website }}" placeholder="https://organization.com">
-        </div>
-      </div>
-
-      <!-- Metadata -->
-      <div style="background:var(--gray-50);padding:1.5rem;border-radius:12px;margin-bottom:1.5rem;">
-        <div style="font-size:0.85rem;color:var(--gray-600);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:1rem;">Metadata</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;font-size:0.9rem;">
-          <div><strong>Created:</strong> {{ org.created_at[:10] if org.created_at else 'N/A' }}</div>
-          <div><strong>Updated:</strong> {{ org.updated_at[:10] if org.updated_at else 'N/A' }}</div>
-          <div>
-            <strong>Status:</strong>
-            {% if org.active %}
-            <span style="color:var(--success);">Active</span>
-            {% else %}
-            <span style="color:var(--danger);">Inactive</span>
-            {% endif %}
-          </div>
-        </div>
-      </div>
-
-      <div style="display:flex;gap:1rem;justify-content:flex-end;padding-top:1.5rem;border-top:1px solid var(--gray-200);">
-        <a href="{{ url_for('organizations_list') }}" class="btn btn-secondary">
-          <i class="fas fa-times"></i> Cancel
-        </a>
-        <button type="submit" class="btn btn-primary">
-          <i class="fas fa-save"></i> Save Changes
-        </button>
-      </div>
-    </form>
+<form method="POST" action="{{ url_for('edit_organization', slug=slug) }}" class="panel" style="max-width:820px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+  <div class="panel-body form-grid">
+    <div class="field"><label for="slug-ro">Slug</label><input type="text" id="slug-ro" value="{{ slug }}" disabled><span class="hint">Instance ID for support login. Cannot be changed.</span></div>
+    <div class="field"><label for="name">Name</label><input type="text" id="name" name="name" value="{{ org.name }}" required></div>
+    <div class="field"><label for="url">Address</label><input type="url" id="url" name="url" value="{{ org.url }}" placeholder="https://crew.example.com"><span class="hint">Must be https:// for health checks and support login.</span></div>
+    <div class="field"><label for="subdomain">Subdomain</label><input type="text" id="subdomain" name="subdomain" value="{{ org.subdomain }}"></div>
+    <div class="field wide"><label for="logo">Logo URL</label><input type="url" id="logo" name="logo" value="{{ org.logo }}"></div>
+    <div class="field"><label for="logo_size">Logo size</label>
+      <select id="logo_size" name="logo_size">
+        {% for val, label in [('contain','Fit inside'),('cover','Fill'),('80%','80%'),('60%','60%')] %}<option value="{{ val }}" {% if org.logo_size == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></div>
+    <div class="field"><label for="logo_padding">Logo padding</label>
+      <select id="logo_padding" name="logo_padding">
+        {% for val, label in [('0px','None'),('8px','Small'),('12px','Medium'),('20px','Large')] %}<option value="{{ val }}" {% if org.logo_padding == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></div>
+    <div class="field"><label for="primary_color">Primary colour</label>
+      <div class="row"><input type="color" id="primary_color_picker" value="{{ org.primary_color }}" aria-label="Pick primary colour" oninput="document.getElementById('primary_color').value=this.value">
+      <input type="text" id="primary_color" name="primary_color" value="{{ org.primary_color }}" oninput="document.getElementById('primary_color_picker').value=this.value"></div></div>
+    <div class="field"><label for="secondary_color">Secondary colour</label>
+      <div class="row"><input type="color" id="secondary_color_picker" value="{{ org.secondary_color }}" aria-label="Pick secondary colour" oninput="document.getElementById('secondary_color').value=this.value">
+      <input type="text" id="secondary_color" name="secondary_color" value="{{ org.secondary_color }}" oninput="document.getElementById('secondary_color_picker').value=this.value"></div></div>
+    <div class="field wide"><label for="description">Description</label><textarea id="description" name="description">{{ org.description }}</textarea></div>
+    <div class="field wide"><label for="website">Website</label><input type="url" id="website" name="website" value="{{ org.website }}"></div>
   </div>
-</div>
+  <div class="form-actions"><a class="btn btn-ghost" href="{{ url_for('organizations_list') }}">Cancel</a><button type="submit" class="btn btn-primary">Save changes</button></div>
+</form>
 {% endblock %}

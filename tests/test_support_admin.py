@@ -3,6 +3,9 @@ import base64, json, os, re, sys, tempfile
 from urllib.parse import parse_qs, urlparse
 
 tmp = tempfile.mkdtemp()
+ADMIN_PW = "Test-Admin-Pass-123"
+os.environ["ADMIN_INITIAL_PASSWORD"] = ADMIN_PW
+os.environ["SECRET_KEY"] = "t" * 40
 os.environ["DATABASE_URL"] = f"sqlite:///{tmp}/test.db"
 os.environ["SUPPORT_MASTER_KEY"] = __import__("cryptography.fernet", fromlist=["Fernet"]).Fernet.generate_key().decode()
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -20,7 +23,7 @@ app.config["TESTING"] = True
 app_db.init_db()
 with app.app_context():
     admin = User.query.filter_by(username="admin").first()
-    secret, _ = admin.enable_totp(); admin.is_2fa_enabled = True
+    secret = admin.enable_totp(); admin.is_2fa_enabled = True
     db.session.add(User(username="bob", email="bob@x.io", password_hash="x", role="user", is_active=True))
     org = Organization.query.filter_by(slug="demo").first()
     db.session.add(Organization(name="Greenroom", slug="greenroom", url="https://crew.greenroom.org"))
@@ -40,7 +43,14 @@ def csrf(c, path="/support/org/greenroom"):
     return re.search(r'name="csrf_token" value="([^"]+)"', c.get(path).get_data(as_text=True)).group(1)
 
 
+def fresh_step():
+    """Each TOTP code works once; tests reuse the same 30s step, so forget the last used one."""
+    with app.app_context():
+        u = User.query.get(ADMIN_ID); u.totp_last_step = None; db.session.commit()
+
+
 def mint(c, slug="greenroom", **kw):
+    fresh_step()
     data = {"csrf_token": csrf(c, f"/support/org/{slug}"), "scope": "readonly", "minutes": "10",
             "reason": "ticket 42", "totp": pyotp.TOTP(secret).now(), **kw}
     return c.post(f"/support/org/{slug}/login", data=data)
@@ -110,21 +120,118 @@ def test_requires_2fa_on_account():
             u = User.query.get(ADMIN_ID); u.is_2fa_enabled = True; u.login_attempts = 0; db.session.commit()
 
 
-def test_2fa_setup_page_and_api_csrf_header():
-    c = client(); r = c.get("/support/2fa")
-    assert r.status_code == 200 and "Two-factor authentication" in r.get_data(as_text=True)
+def test_2fa_enrol_page_and_api():
+    c = client(); r = c.get("/account/security")
     page = r.get_data(as_text=True)
-    token = re.search(r'const csrf = "([^"]+)"', page).group(1)
+    assert r.status_code == 200 and "Two-factor authentication" in page
+    token = re.search(r'var csrf = "([^"]+)"', page).group(1)
+    assert client().get("/support/2fa").status_code == 302                                 # old link still lands somewhere
     with app.app_context():
         u = User.query.get(ADMIN_ID); u.is_2fa_enabled = False; db.session.commit()
     try:
-        d = c.get("/api/user/2fa/setup").get_json()                                       # existing endpoint
-        ok = c.post("/api/user/2fa/verify", json={"token": pyotp.TOTP(d["secret"]).now()},
-                    headers={"X-CSRFToken": token})                                       # what the page sends
+        d = c.post("/api/user/2fa/setup", headers={"X-CSRFToken": token}).get_json()
+        bad = c.post("/api/user/2fa/verify", json={"token": "000000"}, headers={"X-CSRFToken": token})
+        assert bad.status_code == 400
+        ok = c.post("/api/user/2fa/verify", json={"token": pyotp.TOTP(d["secret"]).now()}, headers={"X-CSRFToken": token})
         assert ok.status_code == 200 and ok.get_json()["success"]
+        codes = ok.get_json()["backup_codes"]
+        assert len(codes) == 10 and all(len(x) == 11 and x[5] == "-" for x in codes)       # abcde-12345
+        with app.app_context():                                                             # only hashes are stored
+            stored = User.query.get(ADMIN_ID).backup_codes
+            assert all(x.startswith("h1$") for x in stored)
+            assert not any(x.replace("-", "") in "".join(stored) for x in codes)
     finally:
         with app.app_context():
-            u = User.query.get(ADMIN_ID); u.totp_secret = secret; u.is_2fa_enabled = True; db.session.commit()
+            u = User.query.get(ADMIN_ID); u.totp_secret = secret; u.is_2fa_enabled = True; u.totp_last_step = None
+            u.login_attempts = 0; db.session.commit()
+
+
+def _login_to_2fa_step():
+    c = app.test_client()
+    t = csrf(c, "/login")
+    r = c.post("/login", data={"username": "admin", "password": ADMIN_PW, "csrf_token": t})
+    assert r.status_code == 302 and r.headers["Location"].endswith("/verify-2fa"), r.headers
+    return c
+
+
+def test_login_2fa_totp_backup_replay_and_lockout():
+    with app.app_context():
+        u = User.query.get(ADMIN_ID); u.totp_last_step = None; u.login_attempts = 0; u.locked_until = None
+        codes = u.generate_backup_codes(); db.session.commit()
+    # a valid authenticator code signs in
+    c = _login_to_2fa_step(); t = csrf(c, "/verify-2fa")
+    code = pyotp.TOTP(secret).now()
+    r = c.post("/verify-2fa", data={"token": code, "csrf_token": t})
+    assert r.headers["Location"].endswith("/dashboard") and c.get("/dashboard").status_code == 200
+    # the same code a second time is refused (replay), with a clear message
+    c = _login_to_2fa_step(); t = csrf(c, "/verify-2fa")
+    r = c.post("/verify-2fa", data={"token": code, "csrf_token": t}, follow_redirects=True)
+    assert "already used" in r.get_data(as_text=True)
+    # a backup code works through the real form field (any case / with or without the dash), once
+    c = _login_to_2fa_step(); t = csrf(c, "/verify-2fa")
+    assert "maxlength=\"20\"" in c.get("/verify-2fa").get_data(as_text=True)               # the form can hold a backup code
+    r = c.post("/verify-2fa", data={"token": codes[0].upper(), "csrf_token": t})
+    assert r.headers["Location"].endswith("/dashboard")
+    c = _login_to_2fa_step(); t = csrf(c, "/verify-2fa")
+    r = c.post("/verify-2fa", data={"token": codes[0], "csrf_token": t})
+    assert r.headers["Location"].endswith("/verify-2fa")                                    # already spent
+    # page loads do not eat the rate limit: many GETs, then a valid POST still works
+    for _ in range(12):
+        assert c.get("/verify-2fa").status_code == 200
+    # repeated wrong codes lock the account, including the 2FA step
+    with app.app_context():
+        u = User.query.get(ADMIN_ID); u.login_attempts = 0; u.locked_until = None; db.session.commit()
+    c = _login_to_2fa_step()
+    for _ in range(6):
+        page = c.get("/verify-2fa")
+        if page.status_code != 200:
+            break                                                                           # lockout ended the attempt
+        t = re.search(r'name="csrf_token" value="([^"]+)"', page.get_data(as_text=True)).group(1)
+        c.post("/verify-2fa", data={"token": "000000", "csrf_token": t})
+    with app.app_context():
+        assert User.query.get(ADMIN_ID).locked_until is not None
+    c2 = app.test_client()
+    r = c2.post("/login", data={"username": "admin", "password": ADMIN_PW, "csrf_token": csrf(c2, "/login")}, follow_redirects=True)
+    assert "locked" in r.get_data(as_text=True)
+    with app.app_context():
+        u = User.query.get(ADMIN_ID); u.login_attempts = 0; u.locked_until = None; u.totp_last_step = None; db.session.commit()
+
+
+def test_pending_2fa_expires():
+    c = _login_to_2fa_step()
+    with c.session_transaction() as s:
+        s["pending_2fa_at"] = s["pending_2fa_at"] - 3600
+    r = c.get("/verify-2fa")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/login")
+
+
+def test_destructive_actions_are_post_only():
+    c = client()
+    assert c.get("/organizations/plainhttp/delete").status_code == 405
+    assert c.get("/organizations/plainhttp/toggle").status_code == 405
+    assert c.get("/kill-switches/greenroom/toggle").status_code == 405
+    r = c.post("/kill-switches/greenroom/toggle", data={"csrf_token": csrf(c, "/kill-switches"), "reason": "overdue"})
+    assert r.status_code == 302
+    page = c.get("/kill-switches").get_data(as_text=True)
+    assert "Suspended" in page and "overdue" in page
+    c.post("/kill-switches/greenroom/toggle", data={"csrf_token": csrf(c, "/kill-switches")})
+
+
+def test_every_page_renders():
+    c = client()
+    for path in ("/", "/dashboard", "/organizations", "/organizations/add", "/organizations/greenroom/edit",
+                 "/kill-switches", "/logs", "/users", "/uptime", "/support/", "/support/org/greenroom",
+                 "/account/security"):
+        r = c.get(path); assert r.status_code == 200, (path, r.status_code)
+    assert client().get("/static/console.css").status_code == 200
+    assert b"data-health=\"greenroom\"" in c.get("/dashboard").data
+
+
+def test_support_receiver_check_endpoint_is_admin_only_and_safe():
+    assert client().get("/support/org/greenroom/receiver").get_json()["status"] in ("down", "unknown", "blocked")
+    assert client(BOB_ID, "user", "bob").get("/support/org/greenroom/receiver").status_code == 403
+    r = client().get("/support/org/plainhttp/receiver").get_json()                           # http:// is never contacted
+    assert r["status"] == "unknown"
 
 
 def test_per_org_disable():

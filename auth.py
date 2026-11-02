@@ -2,24 +2,28 @@
 Authentication utilities for ShowWise Backend
 """
 from functools import wraps
-from flask import session, redirect, url_for, request, jsonify
+from flask import session, redirect, url_for, request, jsonify, has_request_context
 from datetime import datetime, timedelta
+import os
 import secrets
 import hashlib
 
-MAX_LOGIN_ATTEMPTS = 5
-LOCKOUT_DURATION = timedelta(minutes=30)
+MAX_LOGIN_ATTEMPTS = int(os.getenv('MAX_LOGIN_ATTEMPTS', 5))
+LOCKOUT_DURATION = timedelta(minutes=int(os.getenv('LOCKOUT_DURATION', 30)))
+PENDING_2FA_TTL = timedelta(minutes=5)  # how long a password-verified login may wait for its 2FA code
 
 
 def get_client_ip():
-    """Get client IP, respecting reverse-proxy headers."""
-    forwarded = request.headers.get('X-Forwarded-For')
-    if forwarded:
-        return forwarded.split(',')[0].strip()
+    """Client IP. Behind a reverse proxy set TRUSTED_PROXY_HOPS so app_db applies ProxyFix;
+    request.remote_addr is then the real client. Raw forwarding headers are never trusted here."""
+    if not has_request_context():
+        return 'cli'
     return request.remote_addr or '127.0.0.1'
 
 
 def get_user_agent():
+    if not has_request_context():
+        return ''
     return (request.headers.get('User-Agent') or '')[:255]
 
 
@@ -44,13 +48,22 @@ def log_security_event(log_type, message, level='info', user_id=None, org_id=Non
 
 
 def is_account_locked(user):
-    """Return True if the account is currently locked."""
-    return bool(user.locked_until and user.locked_until > datetime.utcnow())
+    """Return True if the account is currently locked. An expired lock is cleared here."""
+    if not user.locked_until:
+        return False
+    if user.locked_until > datetime.utcnow():
+        return True
+    from models import db
+    user.locked_until = None
+    user.login_attempts = 0  # a fresh window after the lock runs out
+    db.session.commit()
+    return False
 
 
 def lock_account(user):
-    """Increment failed attempts; lock after threshold."""
+    """Count a failed attempt; lock after the threshold."""
     from models import db
+    is_account_locked(user)  # clears an expired lock before counting again
     user.login_attempts = (user.login_attempts or 0) + 1
     if user.login_attempts >= MAX_LOGIN_ATTEMPTS:
         user.locked_until = datetime.utcnow() + LOCKOUT_DURATION
@@ -81,13 +94,49 @@ def reset_login_attempts(user):
     db.session.commit()
 
 
-def verify_totp_token(user, token, use_backup=False):
-    """Verify a TOTP or backup code. Returns True on success."""
+def verify_second_factor(user, code):
+    """Check an authenticator code or a backup code.
+
+    Returns (ok, reason) where reason is None, 'invalid' or 'reused'.
+    Six digits is an authenticator code; anything else is treated as a backup code.
+    """
     if not user.is_2fa_enabled:
-        return True
-    if use_backup:
-        return user.use_backup_code(token)
-    return user.verify_totp(token)
+        return True, None
+    compact = ''.join(ch for ch in str(code or '') if ch not in ' -')
+    if compact.isdigit() and len(compact) == 6:
+        status = user.check_totp(compact)
+        return status == 'ok', (None if status == 'ok' else status)
+    return (True, None) if user.use_backup_code(code) else (False, 'invalid')
+
+
+def start_session(user):
+    """Create a fresh authenticated session (drops anything set before login)."""
+    session.clear()
+    session['user_id'] = user.id
+    session['username'] = user.username
+    session['role'] = user.role
+    session.permanent = True
+
+
+def begin_pending_2fa(user):
+    """Remember that the password step passed and a second factor is still owed."""
+    session.clear()
+    session['pending_2fa_user'] = user.id
+    session['pending_2fa_at'] = datetime.utcnow().timestamp()
+
+
+def pending_2fa_user():
+    """The user waiting on 2FA, or None if there is none or it timed out."""
+    from models import User
+    uid = session.get('pending_2fa_user')
+    started = session.get('pending_2fa_at')
+    if not uid or not started:
+        return None
+    if datetime.utcnow().timestamp() - float(started) > PENDING_2FA_TTL.total_seconds():
+        session.pop('pending_2fa_user', None)
+        session.pop('pending_2fa_at', None)
+        return None
+    return User.query.get(uid)
 
 
 def login_required(f):
@@ -120,10 +169,15 @@ def admin_required(f):
 
 
 def require_2fa(f):
-    """Decorator: ensure a pending 2FA session token exists."""
+    """Decorator: only reachable while a password-verified login is waiting for its 2FA code."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        if 'pending_2fa_user' not in session:
+        if pending_2fa_user() is None:
+            from flask import flash
+            if 'pending_2fa_user' in session or 'pending_2fa_at' in session:
+                session.pop('pending_2fa_user', None)
+                session.pop('pending_2fa_at', None)
+            flash('Your sign-in timed out. Enter your password again.', 'warning')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated

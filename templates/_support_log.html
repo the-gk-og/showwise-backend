@@ -1,7 +1,7 @@
-<div class="table-container"><table>
+<div class="table-wrap"><table class="tbl">
   <thead><tr><th>Time</th><th>Event</th></tr></thead>
   <tbody>
-  {% for r in recent %}<tr><td style="white-space:nowrap;">{{ r.created_at|sfmt }}</td><td>{{ r.message }}</td></tr>
-  {% else %}<tr><td colspan="2" style="color:var(--gray-600);">No support logins yet.</td></tr>{% endfor %}
+  {% for r in recent %}<tr><td class="nowrap mono small muted">{{ r.created_at|sfmt }}</td><td class="wrap-any">{{ r.message }}</td></tr>
+  {% else %}<tr><td colspan="2" class="muted" style="padding:24px 16px;text-align:center;">No support logins yet.</td></tr>{% endfor %}
   </tbody>
 </table></div>

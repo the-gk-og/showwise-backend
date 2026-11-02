@@ -1,16 +1,36 @@
 {% extends "base.html" %}
-{% block title %}Security Logs - ShowWise Backend{% endblock %}
+{% block title %}Logs - ShowWise Backend{% endblock %}
 {% block content %}
-<div class="page-header"><h1><i class="fas fa-clipboard-list"></i> Security Logs</h1><p>Latest 250 matching security and support events.</p></div>
-<div class="card" style="margin-bottom:2rem;">
-<form method="GET" action="{{ url_for('logs_list') }}" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;align-items:end;">
-<div><label for="q">Search message, IP or user agent</label><input id="q" name="q" value="{{ search }}" placeholder="Search logs"></div>
-<div><label for="type">Event type</label><select id="type" name="type"><option value="">All types</option>{% for item in types %}<option value="{{ item }}" {% if selected_type == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></div>
-<div><label for="level">Level</label><select id="level" name="level"><option value="">All levels</option>{% for item in ['info','warning','error','critical'] %}<option value="{{ item }}" {% if selected_level == item %}selected{% endif %}>{{ item|title }}</option>{% endfor %}</select></div>
-<div><button class="btn btn-primary" type="submit">Filter</button> <a class="btn btn-secondary" href="{{ url_for('logs_list') }}">Reset</a></div>
-</form></div>
-<div class="card"><div class="table-container"><table><thead><tr><th>Time (UTC)</th><th>Level</th><th>Event</th><th>Message</th><th>User ID</th><th>IP</th></tr></thead><tbody>
-{% for log in logs %}<tr><td>{{ log.created_at|sfmt }}</td><td><strong>{{ log.level|upper }}</strong></td><td><code>{{ log.log_type }}</code></td><td style="max-width:420px;overflow-wrap:anywhere;">{{ log.message }}</td><td>{{ log.user_id or '—' }}</td><td>{{ log.ip_address or '—' }}</td></tr>
-{% else %}<tr><td colspan="6" style="color:var(--gray-600);">No matching log entries.</td></tr>{% endfor %}
-</tbody></table></div></div>
+<div class="page-head"><div><h1>Logs</h1><p>The latest 250 security and support events that match your filters.</p></div></div>
+
+<form method="GET" action="{{ url_for('logs_list') }}" class="panel" style="margin-bottom:18px;">
+  <div class="panel-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;align-items:end;">
+    <div class="field"><label for="q">Search</label><input id="q" type="search" name="q" value="{{ search }}" placeholder="Message, IP or browser"></div>
+    <div class="field"><label for="type">Event type</label>
+      <select id="type" name="type"><option value="">All types</option>{% for item in types %}<option value="{{ item }}" {% if selected_type == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="level">Level</label>
+      <select id="level" name="level"><option value="">All levels</option>{% for item in ['info','warning','error','critical'] %}<option value="{{ item }}" {% if selected_level == item %}selected{% endif %}>{{ item|title }}</option>{% endfor %}</select></div>
+    <div class="row"><button class="btn btn-primary" type="submit">Filter</button><a class="btn btn-ghost" href="{{ url_for('logs_list') }}">Reset</a></div>
+  </div>
+</form>
+
+<div class="panel flush"><div class="panel-body table-wrap">
+  <table class="tbl">
+    <thead><tr><th>Time (UTC)</th><th>Level</th><th>Event</th><th>Message</th><th>User</th><th>IP</th></tr></thead>
+    <tbody>
+    {% for log in logs %}
+      <tr>
+        <td class="nowrap mono small">{{ log.created_at|sfmt }}</td>
+        <td><span class="chip {{ 'down' if log.level in ('error','critical') else ('warn' if log.level == 'warning' else '') }}">{{ log.level|capitalize }}</span></td>
+        <td><code>{{ log.log_type }}</code></td>
+        <td class="wrap-any" style="max-width:440px;">{{ log.message }}</td>
+        <td class="muted">{{ log.user_id or '—' }}</td>
+        <td class="mono small muted">{{ log.ip_address or '—' }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="muted" style="padding:28px 16px;text-align:center;">No log entries match these filters.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div></div>
 {% endblock %}

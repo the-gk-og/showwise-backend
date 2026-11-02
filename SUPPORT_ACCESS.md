@@ -11,7 +11,7 @@ Instances are your Organizations (slug = instance ID, url = where the instance l
    It encrypts the signing key stored in the `support_signing_keys` table. The table is created
    automatically on first visit, no migration needed.
 3. Restart, sign in as an admin, open **Support** in the nav. The first visit generates the signing key.
-4. Turn on 2FA for your admin account at `/support/2fa` (or use your existing setup). Support logins
+4. Turn on 2FA for your admin account at `/account/security`. Support logins
    require a fresh authenticator code. Set `SUPPORT_REQUIRE_2FA=0` only for local testing.
 
 ## Per customer instance (once)
@@ -37,6 +37,14 @@ instance for the whole session, and the instance keeps its own audit log that th
 - 20 mints per hour per IP. Mint responses are `no-store` and redirect with `Referrer-Policy: no-referrer`.
 - Per-organization **Disable support access** button blocks minting for that org (stored in `settings`).
 - The org URL must be https:// (http only for localhost, or `SUPPORT_ALLOW_HTTP=1`).
+
+## Checking an instance is ready
+Support -> an organization shows a **Receiver** chip. *Receiver on* means the instance answers at
+`/support/login`. *Not set up* means its env vars are missing or it does not include `support_access.py` yet.
+
+## Locked out of 2FA
+Each authenticator code works once, backup codes (shown once at setup) work once each. If you lose both, on the server:
+`flask --app app_db reset-2fa <username>`, then sign in and turn 2FA on again.
 
 ## Key rotation
 Rotate -> paste the new `SUPPORT_PUBLIC_KEY` (new key + old key) on every instance -> Revoke the old key.

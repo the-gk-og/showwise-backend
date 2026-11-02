@@ -26,7 +26,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for, jsonify
 from sqlalchemy import func
 
-from auth import admin_required, lock_account, log_security_event, login_required
+from auth import admin_required, is_account_locked, lock_account, log_security_event, login_required
+from instance_checks import support_receiver_status
 from models import Log, Organization, Setting, SupportSigningKey, User, db
 
 ISSUER = "showwise-support"
@@ -202,11 +203,16 @@ def login_to_org(slug):
         if not user.is_2fa_enabled:
             flash("Turn on 2FA for your account before using support access.", "error")
             return back
-        if not user.verify_totp((request.form.get("totp") or "").replace(" ", "")):
+        if is_account_locked(user):
+            flash("Too many wrong codes. This account is locked for a while.", "warning")
+            return back
+        status = user.check_totp(request.form.get("totp") or "")
+        if status != "ok":
             lock_account(user)  # same counter/lockout as the normal login
-            log_security_event("support_denied", f"Bad 2FA code for support login to {org.slug}",
+            log_security_event("support_denied", f"Bad 2FA code ({status}) for support login to {org.slug}",
                                "warning", user_id=user.id, org_id=org.id)
-            flash("Invalid 2FA code.", "error")
+            flash("That code was already used. Wait for the next one." if status == "reused"
+                  else "That 2FA code is not valid.", "error")
             return back
 
     token, jti = mint_token(_load_private(_active_key()), org.slug, _operator(user), scope, minutes)
@@ -221,10 +227,18 @@ def login_to_org(slug):
 
 @support_bp.get("/2fa")
 @login_required
-@admin_required
 def twofa_page():
-    """Tiny self-serve 2FA setup that drives the existing /api/user/2fa/* endpoints."""
-    return render_template("support_2fa.html", enabled=bool(User.query.get(session["user_id"]).is_2fa_enabled))
+    """Kept so old links keep working; 2FA now lives at /account/security."""
+    return redirect(url_for("account_security.page"))
+
+
+@support_bp.get("/org/<slug>/receiver")
+@login_required
+@admin_required
+def receiver_check(slug):
+    """JSON: is the support receiver switched on at this organization's instance?"""
+    org = _org_or_404(slug)
+    return jsonify(support_receiver_status(org.url))
 
 
 @support_bp.post("/org/<slug>/toggle")
@@ -272,42 +286,10 @@ def key_revoke(kid):
 
 
 
-def _api_user_2fa_setup():
-    """Start TOTP setup for the signed-in admin and return a QR code plus secret."""
-    user = User.query.get(session.get("user_id"))
-    if user is None or not user.is_active or user.role != "admin":
-        return jsonify({"error": "Admin access required"}), 403
-    if user.is_2fa_enabled:
-        return jsonify({"error": "2FA is already enabled"}), 409
-    secret, _backup_codes = user.enable_totp()
-    db.session.commit()
-    return jsonify({"secret": secret, "qr_code": user.get_totp_qr_code()})
-
-
-def _api_user_2fa_verify():
-    """Verify the first TOTP code before enabling 2FA and exposing backup codes."""
-    user = User.query.get(session.get("user_id"))
-    if user is None or not user.is_active or user.role != "admin":
-        return jsonify({"error": "Admin access required"}), 403
-    if user.is_2fa_enabled:
-        return jsonify({"error": "2FA is already enabled"}), 409
-    data = request.get_json(silent=True) or {}
-    token = str(data.get("token", "")).replace(" ", "").replace("-", "")
-    if not user.verify_totp(token):
-        return jsonify({"error": "Invalid authenticator code"}), 400
-    user.is_2fa_enabled = True
-    db.session.commit()
-    log_security_event("2fa_enabled", "Two-factor authentication enabled", "info", user_id=user.id)
-    return jsonify({"success": True, "backup_codes": user.backup_codes or []})
-
-
-
 def init_support_admin(app, limiter=None):
     app.register_blueprint(support_bp)
-    app.add_url_rule("/api/user/2fa/setup", endpoint="support_2fa_setup_api",
-                     view_func=login_required(_api_user_2fa_setup), methods=["POST"])
-    app.add_url_rule("/api/user/2fa/verify", endpoint="support_2fa_verify_api",
-                     view_func=login_required(_api_user_2fa_verify), methods=["POST"])
     if limiter is not None:  # minting is also rate limited per IP
         ep = "support.login_to_org"
         app.view_functions[ep] = limiter.limit("20 per hour")(app.view_functions[ep])
+        ep = "support.receiver_check"
+        app.view_functions[ep] = limiter.limit("60 per minute")(app.view_functions[ep])

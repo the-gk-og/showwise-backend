@@ -1,46 +1,99 @@
 {% extends "base.html" %}
-{% block title %}Dashboard - ShowWise{% endblock %}
+{% block title %}Overview - ShowWise Backend{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h1><i class="fas fa-chart-line"></i> Dashboard</h1>
-  <p>Welcome, {{ username }}!</p>
+<div class="page-head">
+  <div>
+    <h1>Overview</h1>
+    <p>Every instance, checked live when this page opens.</p>
+  </div>
+  {% if role == 'admin' %}
+  <div class="page-actions">
+    <button class="btn" type="button" data-recheck><i class="fas fa-rotate"></i> Check again</button>
+    <a class="btn btn-primary" href="{{ url_for('add_organization') }}"><i class="fas fa-plus"></i> Add instance</a>
+  </div>
+  {% endif %}
 </div>
 
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-  <div class="card" style="padding: 1.5rem; text-align: center;">
-    <div style="font-size: 2.5rem; color: var(--primary); margin-bottom: 0.5rem;">
-      <i class="fas fa-building"></i>
-    </div>
-    <div style="font-size: 2.5rem; font-weight: 900;">{{ stats.total_organizations }}</div>
-    <div style="color: var(--gray-600); font-size: 0.9rem;">Total Organizations</div>
-  </div>
-
-  <div class="card" style="padding: 1.5rem; text-align: center;">
-    <div style="font-size: 2.5rem; color: var(--success); margin-bottom: 0.5rem;">
-      <i class="fas fa-check-circle"></i>
-    </div>
-    <div style="font-size: 2.5rem; font-weight: 900;">{{ stats.active_organizations }}</div>
-    <div style="color: var(--gray-600); font-size: 0.9rem;">Active</div>
-  </div>
-
-  <div class="card" style="padding: 1.5rem; text-align: center;">
-    <div style="font-size: 2.5rem; color: var(--danger); margin-bottom: 0.5rem;">
-      <i class="fas fa-pause-circle"></i>
-    </div>
-    <div style="font-size: 2.5rem; font-weight: 900;">{{ stats.inactive_organizations }}</div>
-    <div style="color: var(--gray-600); font-size: 0.9rem;">Inactive</div>
+{% if not user.is_2fa_enabled %}
+<div class="panel notice" style="margin-bottom:18px;">
+  <div class="panel-body" style="display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
+    <div><strong>Turn on two-factor authentication.</strong>
+      <div class="muted small">Support login to customer instances is blocked until your account has it.</div></div>
+    <a class="btn btn-sm" href="{{ url_for('account_security.page') }}">Set up 2FA</a>
   </div>
 </div>
+{% endif %}
 
-<div class="card">
-  <h2 style="margin-bottom: 1.5rem;"><i class="fas fa-list"></i> Quick Actions</h2>
-  <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-    <a href="{{ url_for('organizations_list') }}" class="btn btn-primary">
-      <i class="fas fa-building"></i> Manage Organizations
-    </a>
-    <a href="{{ url_for('kill_switches_list') }}" class="btn btn-warning">
-      <i class="fas fa-power-off"></i> Kill Switches
-    </a>
-  </div>
+{% if role == 'admin' %}
+<div class="attention" aria-label="Needs attention">
+  {% if stats.kill_switches_on %}<a class="bad" href="{{ url_for('kill_switches_list') }}"><span class="lamp" data-state="down"></span>{{ stats.kill_switches_on }} instance{{ '' if stats.kill_switches_on == 1 else 's' }} suspended</a>{% endif %}
+  {% if stats.users_without_2fa %}<a class="warn" href="{{ url_for('users_list') }}"><span class="lamp" data-state="warn"></span>{{ stats.users_without_2fa }} admin{{ '' if stats.users_without_2fa == 1 else 's' }} without 2FA</a>{% endif %}
+  {% if stats.locked_accounts %}<a class="warn" href="{{ url_for('users_list') }}"><span class="lamp" data-state="warn"></span>{{ stats.locked_accounts }} locked account{{ '' if stats.locked_accounts == 1 else 's' }}</a>{% endif %}
+  {% if stats.failed_logins_24h %}<a class="warn" href="{{ url_for('logs_list', type='login_failed') }}"><span class="lamp" data-state="warn"></span>{{ stats.failed_logins_24h }} failed sign-in{{ '' if stats.failed_logins_24h == 1 else 's' }} in 24 hours</a>{% endif %}
+  {% if stats.support_logins_24h %}<a href="{{ url_for('logs_list', type='support_login') }}"><span class="lamp" data-state="off"></span>{{ stats.support_logins_24h }} support login{{ '' if stats.support_logins_24h == 1 else 's' }} in 24 hours</a>{% endif %}
+  {% if not (stats.kill_switches_on or stats.users_without_2fa or stats.locked_accounts or stats.failed_logins_24h) %}
+  <span class="ok"><span class="lamp" data-state="up"></span>Nothing needs attention</span>
+  {% endif %}
 </div>
+
+<section class="panel flush" aria-labelledby="board-title">
+    <div class="panel-head">
+      <h2 id="board-title">Instances</h2>
+      <span class="muted small"><span data-tally="up">0</span> up, <span data-tally="warn">0</span> degraded, <span data-tally="down">0</span> down</span>
+    </div>
+    <div class="panel-body">
+      {% if instances %}
+      <div class="board-head"><span>Instance</span><span>Address</span><span>Status</span><span>Support</span><span></span></div>
+      {% for i in instances %}
+      <div class="board-row" {% if i.active and i.url %}data-health="{{ i.slug }}"{% endif %}>
+        <div class="who-cell">
+          <span class="lamp" data-lamp data-state="{{ 'checking' if (i.active and i.url) else 'off' }}"></span>
+          <span class="badge-logo" style="background:{{ i.color }};">{% if i.logo %}<img src="{{ i.logo }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}{{ i.name[:1]|upper }}{% endif %}</span>
+          <div><div class="name">{{ i.name }}</div><div class="sub mono">{{ i.slug }}</div></div>
+        </div>
+        <div class="url-cell" title="{{ i.url }}">{{ i.url|replace('https://','')|replace('http://','') or 'No URL set' }}</div>
+        <div>
+          {% if i.kill %}<span class="chip down">Suspended</span>
+          {% elif not i.active %}<span class="chip">Inactive</span>
+          {% elif not i.url %}<span class="chip warn">No URL</span>
+          {% else %}<span data-status-label>Checking</span><div class="latency" data-latency>—</div>{% endif %}
+        </div>
+        <div class="support-cell small">
+          {% if i.support_off %}<span class="chip">Support off</span>
+          {% elif i.last_support %}<span class="muted" title="{{ i.last_support|sfmt }}">Last {{ i.last_support.strftime('%d %b') }}</span>
+          {% else %}<span class="muted">No access yet</span>{% endif %}
+        </div>
+        <div class="board-actions">
+          {% if i.url and not i.support_off %}<a class="btn btn-sm" href="{{ url_for('support.org_page', slug=i.slug) }}">Support</a>{% endif %}
+          <a class="btn btn-sm btn-ghost" href="{{ url_for('edit_organization', slug=i.slug) }}" aria-label="Edit {{ i.name }}"><i class="fas fa-pen"></i></a>
+        </div>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="board-empty">
+        <div class="empty"><strong>No instances yet</strong><span>Add the first customer deployment to start monitoring it.</span>
+        <a class="btn btn-primary" href="{{ url_for('add_organization') }}">Add instance</a></div>
+      </div>
+      {% endif %}
+    </div>
+</section>
+
+<section class="panel flush" aria-labelledby="feed-title" style="margin-top:18px;">
+    <div class="panel-head"><h2 id="feed-title">Recent activity</h2><a class="small" href="{{ url_for('logs_list') }}">All logs</a></div>
+    <div class="panel-body">
+      <ul class="feed">
+        {% for log in activity %}
+        <li>
+          <span class="lamp" data-state="{{ 'down' if log.level in ('error','critical') else ('warn' if log.level == 'warning' else 'off') }}"></span>
+          <div><div class="msg">{{ log.message }}</div><div class="when">{{ log.created_at|sfmt }}</div></div>
+        </li>
+        {% else %}
+        <li><span></span><div class="muted">Nothing has happened yet.</div></li>
+        {% endfor %}
+      </ul>
+    </div>
+</section>
+{% else %}
+<div class="panel"><div class="panel-body">Signed in as {{ username }}. Instance management needs an admin account.</div></div>
+{% endif %}
 {% endblock %}

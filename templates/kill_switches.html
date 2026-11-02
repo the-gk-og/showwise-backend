@@ -1,87 +1,56 @@
 {% extends "base.html" %}
-{% block title %}Kill Switches - ShowWise Backend{% endblock %}
+{% block title %}Kill switches - ShowWise Backend{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h1><i class="fas fa-power-off"></i> Kill Switch Management</h1>
-  <p>Emergency instance shutdown controls</p>
+<div class="page-head">
+  <div><h1>Kill switches</h1>
+  <p>Suspending an instance shows its users a "Service suspended" page with your reason. Instances read this from <code>GET /api/kill-switch/&lt;slug&gt;</code>.</p></div>
 </div>
 
-<div class="card" style="margin-bottom:2rem;background:#fef2f2;border-color:var(--danger);">
-  <div style="display:flex;gap:1rem;">
-    <div style="font-size:2rem;color:var(--danger);"><i class="fas fa-exclamation-triangle"></i></div>
-    <div>
-      <h3 style="font-weight:800;margin-bottom:0.5rem;">⚠️ Critical Feature</h3>
-      <p style="color:var(--gray-700);line-height:1.8;">
-        Kill switches allow you to remotely disable instances (e.g., non-payment).
-        Instances should check <code>GET /api/kill-switch/{slug}</code> and display a "Service Suspended" page when enabled.
-      </p>
-    </div>
-  </div>
-</div>
-
-<div style="display:grid;gap:1.5rem;">
+{% if organizations %}
+<div class="panel flush"><div class="panel-body">
   {% for slug, org in organizations.items() %}
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:start;gap:2rem;">
-      <div style="flex:1;">
-        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;">
-          {% if org.logo %}
-          <img src="{{ org.logo }}" alt="{{ org.name }}" style="width:40px;height:40px;object-fit:contain;">
-          {% endif %}
-          <h3 style="font-size:1.25rem;font-weight:800;">{{ org.name }}</h3>
-        </div>
-
-        {% if kill_switches.get(slug, {}).get('enabled') %}
-        <div style="background:#fef2f2;border-left:4px solid var(--danger);padding:1rem;border-radius:8px;margin-bottom:1rem;">
-          <div style="font-weight:700;color:var(--danger);margin-bottom:0.5rem;"><i class="fas fa-ban"></i> KILL SWITCH ACTIVE</div>
-          <div style="font-size:0.9rem;color:var(--gray-700);">
-            <strong>Reason:</strong> {{ kill_switches[slug].get('reason') or 'No reason provided' }}
-          </div>
-          {% if kill_switches[slug].get('enabled_by') %}
-          <div style="font-size:0.85rem;color:var(--gray-600);margin-top:0.5rem;">
-            Enabled by {{ kill_switches[slug].enabled_by }} at {{ kill_switches[slug].enabled_at[:16] if kill_switches[slug].enabled_at else 'unknown time' }}
-          </div>
-          {% endif %}
-        </div>
-
-        <form method="POST" action="{{ url_for('update_kill_switch', org_slug=slug) }}" style="margin-bottom:1rem;">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-          <div class="form-group" style="margin-bottom:0.5rem;">
-            <label for="reason_{{ slug }}">Update Reason</label>
-            <input type="text" id="reason_{{ slug }}" name="reason"
-                   value="{{ kill_switches[slug].get('reason', '') }}"
-                   placeholder="Payment overdue, trial expired, …">
-          </div>
-          <button type="submit" class="btn btn-secondary" style="padding:0.5rem 1rem;font-size:0.9rem;">
-            <i class="fas fa-save"></i> Update Reason
-          </button>
-        </form>
-
-        {% else %}
-        <div style="background:#ecfdf5;border-left:4px solid var(--success);padding:1rem;border-radius:8px;">
-          <div style="font-weight:700;color:var(--success);"><i class="fas fa-check-circle"></i> Instance Active</div>
-          <div style="font-size:0.9rem;color:var(--gray-700);">Kill switch is not enabled</div>
-        </div>
-        {% endif %}
+  {% set ks = kill_switches.get(slug, {}) %}
+  <div class="switch-card">
+    <div>
+      <div class="switch-title">
+        <span class="lamp" data-state="{{ 'down' if ks.get('enabled') else 'up' }}"></span>
+        <span class="badge-logo" style="background:{{ org.primary_color }};">{% if org.logo %}<img src="{{ org.logo }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}{{ org.name[:1]|upper }}{% endif %}</span>
+        <h3>{{ org.name }}</h3>
+        <span class="chip {{ 'down' if ks.get('enabled') else 'up' }}">{{ 'Suspended' if ks.get('enabled') else 'Live' }}</span>
       </div>
-
-      <div>
-        <a href="{{ url_for('toggle_kill_switch', org_slug=slug) }}"
-           class="btn {% if kill_switches.get(slug, {}).get('enabled') %}btn-success{% else %}btn-danger{% endif %}"
-           onclick="return confirm('{% if kill_switches.get(slug, {}).get('enabled') %}DISABLE{% else %}ENABLE{% endif %} kill switch for {{ org.name }}?');">
-          <i class="fas fa-{% if kill_switches.get(slug, {}).get('enabled') %}play{% else %}ban{% endif %}"></i>
-          {% if kill_switches.get(slug, {}).get('enabled') %}Disable{% else %}Enable{% endif %}
-        </a>
+      <div class="switch-state">
+        {% if ks.get('enabled') %}
+          Reason shown to users: <strong style="color:var(--text);">{{ ks.get('reason') or 'None given' }}</strong>
+          {% if ks.get('enabled_by') %}<div class="small" style="margin-top:4px;">Suspended by {{ ks.enabled_by }}{% if ks.get('enabled_at') %} on {{ ks.enabled_at[:16]|replace('T',' ') }} UTC{% endif %}</div>{% endif %}
+        {% else %}Users can sign in and use this instance normally.{% endif %}
       </div>
+    </div>
+
+    <div class="switch-form">
+      {% if ks.get('enabled') %}
+      <form method="POST" action="{{ url_for('update_kill_switch', org_slug=slug) }}" class="row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="text" name="reason" value="{{ ks.get('reason', '') }}" placeholder="Reason shown to users" aria-label="Reason for {{ org.name }}" maxlength="255">
+        <button class="btn btn-sm" type="submit">Save reason</button>
+      </form>
+      <form method="POST" action="{{ url_for('toggle_kill_switch', org_slug=slug) }}" data-confirm="Restore access for {{ org.name }}?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button class="btn btn-good" type="submit">Restore access</button>
+      </form>
+      {% else %}
+      <form method="POST" action="{{ url_for('toggle_kill_switch', org_slug=slug) }}" data-confirm="Suspend {{ org.name }}? Their users will see the suspended page right away.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div class="row">
+          <input type="text" name="reason" placeholder="Reason shown to users, e.g. payment overdue" aria-label="Reason for suspending {{ org.name }}" maxlength="255">
+          <button class="btn btn-danger" type="submit">Suspend</button>
+        </div>
+      </form>
+      {% endif %}
     </div>
   </div>
   {% endfor %}
-
-  {% if not organizations %}
-  <div class="card" style="text-align:center;padding:4rem 2rem;">
-    <h2>No Organizations</h2>
-    <p style="color:var(--gray-600);">Add organizations first to manage kill switches.</p>
-  </div>
-  {% endif %}
-</div>
+</div></div>
+{% else %}
+<div class="panel"><div class="empty"><strong>No instances yet</strong><span>Add an instance before you can suspend it.</span><a class="btn btn-primary" href="{{ url_for('add_organization') }}">Add instance</a></div></div>
+{% endif %}
 {% endblock %}

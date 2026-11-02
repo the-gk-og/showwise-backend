@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Account security - ShowWise Backend{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Account security</h1>
+    <p>Two-factor authentication protects sign-in and is required before you can use support access.</p>
+  </div>
+</div>
+
+<div class="stack" style="max-width:720px;">
+  <div class="panel" id="status-panel">
+    <div class="panel-head">
+      <h2>Two-factor authentication</h2>
+      <span class="chip {{ 'up' if enabled else 'warn' }}" id="status-chip">{{ 'On' if enabled else 'Off' }}</span>
+    </div>
+
+    {% if enabled %}
+    <div class="panel-body" id="on-view">
+      <p>Signing in asks for a code from your authenticator app. You have <strong id="codes-left">{{ codes_left }}</strong> unused backup code{{ '' if codes_left == 1 else 's' }}.</p>
+    </div>
+    {% else %}
+    <div class="panel-body" id="start-view">
+      <p style="margin-bottom:14px;">Scan a QR code with an authenticator app (1Password, Google Authenticator, Authy), then confirm with a code.</p>
+      <button class="btn btn-primary" id="start" type="button">Set up 2FA</button>
+    </div>
+    <div class="panel-body" id="enrol-view" hidden>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;">
+        <img id="qr" alt="QR code to scan with your authenticator app" width="188" height="188" style="image-rendering:pixelated;background:#fff;padding:8px;border-radius:6px;" />
+        <div style="flex:1;min-width:220px;display:grid;gap:14px;">
+          <div><div class="hint" style="margin-bottom:4px;">Can't scan? Enter this key by hand:</div><code id="secret" class="wrap-any"></code></div>
+          <form id="verify-form" class="field">
+            <label for="verify-code">6-digit code</label>
+            <div class="row"><input type="text" id="verify-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required placeholder="000000" /><button class="btn btn-primary">Turn on</button></div>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="panel-body" id="codes-view" hidden>
+      <p style="margin-bottom:10px;"><strong>Save these backup codes now.</strong> They are shown once. Each works one time if you lose your phone.</p>
+      <div class="codes-grid" id="codes"></div>
+      <div class="row" style="margin-top:12px;">
+        <button class="btn btn-sm" type="button" data-copy="#codes">Copy codes</button>
+        <a class="btn btn-sm btn-primary" href="{{ url_for('account_security.page') }}">I have saved them</a>
+      </div>
+    </div>
+
+    <p id="err" class="flash error" hidden style="margin:0 20px 18px;"></p>
+  </div>
+
+  {% if enabled %}
+  <div class="panel">
+    <div class="panel-head"><div><h2>New backup codes</h2><p>Replaces every unused code. Needs a current authenticator code.</p></div></div>
+    <div class="panel-body">
+      <form id="codes-form" class="row">
+        <input type="text" id="codes-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required placeholder="6-digit code" aria-label="6-digit code" />
+        <button class="btn">Make new codes</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><div><h2>Turn off 2FA</h2><p>Support access stops working until you turn it back on.</p></div></div>
+    <div class="panel-body">
+      <form id="disable-form" class="form-grid">
+        <div class="field"><label for="dis-pass">Password</label><input type="password" id="dis-pass" autocomplete="current-password" required /></div>
+        <div class="field"><label for="dis-code">Code or backup code</label><input type="text" id="dis-code" autocomplete="one-time-code" autocapitalize="off" required /></div>
+        <div class="wide"><button class="btn btn-danger">Turn off 2FA</button></div>
+      </form>
+    </div>
+  </div>
+
+  <p class="hint">Locked out of your authenticator and out of backup codes? On the server run <code>flask --app app_db reset-2fa &lt;username&gt;</code>.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var csrf = "{{ csrf_token() }}";
+  var $ = function (id) { return document.getElementById(id); };
+  function show(id, on) { var el = $(id); if (el) el.hidden = !on; }
+  function fail(msg) { var e = $('err'); e.textContent = msg; e.hidden = false; }
+  function post(url, body) {
+    return fetch(url, { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }, body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { d._ok = r.ok; return d; }); });
+  }
+  function showCodes(codes) {
+    $('codes').innerHTML = '';
+    codes.forEach(function (c) { var s = document.createElement('span'); s.textContent = c; $('codes').appendChild(s); });
+    show('start-view', false); show('enrol-view', false); show('on-view', false); show('codes-view', true);
+    var chip = $('status-chip'); chip.className = 'chip up'; chip.textContent = 'On'; $('err').hidden = true;
+  }
+
+  var start = $('start');
+  if (start) start.addEventListener('click', function () {
+    post('/api/user/2fa/setup').then(function (d) {
+      if (!d._ok) return fail(d.error || 'Could not start setup.');
+      $('qr').src = 'data:image/png;base64,' + d.qr_code; $('secret').textContent = d.secret;
+      show('start-view', false); show('enrol-view', true); $('verify-code').focus();
+    });
+  });
+  var vf = $('verify-form');
+  if (vf) vf.addEventListener('submit', function (e) {
+    e.preventDefault();
+    post('/api/user/2fa/verify', { token: $('verify-code').value }).then(function (d) {
+      if (!d._ok) return fail(d.error || 'That code is not valid.');
+      showCodes(d.backup_codes || []);
+    });
+  });
+  var cf = $('codes-form');
+  if (cf) cf.addEventListener('submit', function (e) {
+    e.preventDefault();
+    post('/api/user/2fa/backup-codes', { code: $('codes-code').value }).then(function (d) {
+      if (!d._ok) return fail(d.error || 'That code is not valid.');
+      showCodes(d.backup_codes || []);
+    });
+  });
+  var df = $('disable-form');
+  if (df) df.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (!window.confirm('Turn off two-factor authentication?')) return;
+    post('/api/user/2fa/disable', { password: $('dis-pass').value, code: $('dis-code').value }).then(function (d) {
+      if (!d._ok) return fail(d.error || 'Could not turn off 2FA.');
+      window.location.reload();
+    });
+  });
+})();
+</script>
+{% endblock %}

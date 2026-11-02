@@ -2,10 +2,14 @@
 Database models for ShowWise Backend (Lite)
 Implements secure authentication with password hashing and TOTP support
 """
+from flask import current_app
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+import hashlib
+import hmac
 import pyotp
 import secrets
+import time
 from datetime import datetime
 import qrcode
 import io
@@ -28,6 +32,7 @@ class User(db.Model):
     is_2fa_enabled = db.Column(db.Boolean, default=False)
     totp_secret = db.Column(db.String(32))
     backup_codes = db.Column(db.JSON)
+    totp_last_step = db.Column(db.Integer)  # last accepted 30s step, blocks code reuse
 
     oauth_providers = db.Column(db.JSON)
 
@@ -51,10 +56,19 @@ class User(db.Model):
             return False
         return check_password_hash(self.password_hash, password)
 
+    # ------------------------------------------------------------------ 2FA
+    BACKUP_CODE_COUNT = 10
+
     def enable_totp(self):
+        """Start TOTP enrolment: new secret, 2FA stays off until a code is confirmed.
+
+        Backup codes are created by generate_backup_codes() when enrolment is confirmed,
+        so the plaintext is shown once and only a keyed hash is stored.
+        """
         self.totp_secret = pyotp.random_base32()
-        self.backup_codes = [secrets.token_hex(4) for _ in range(10)]
-        return self.totp_secret, self.backup_codes
+        self.totp_last_step = None
+        self.backup_codes = []
+        return self.totp_secret
 
     def get_totp_qr_code(self, issuer_name="ShowWise"):
         totp = pyotp.TOTP(self.totp_secret)
@@ -70,22 +84,75 @@ class User(db.Model):
         buffer.seek(0)
         return base64.b64encode(buffer.getvalue()).decode()
 
-    def verify_totp(self, token):
+    def check_totp(self, token):
+        """Return 'ok', 'reused' (valid code from a step already used) or 'invalid'.
+
+        Accepts the previous, current or next 30s step to tolerate clock drift.
+        A successful check records the step so the same code cannot be used twice.
+        """
         if not self.totp_secret:
-            return False
+            return 'invalid'
+        token = ''.join(ch for ch in str(token or '') if ch.isdigit())
+        if len(token) != 6:
+            return 'invalid'
         totp = pyotp.TOTP(self.totp_secret)
-        return totp.verify(token, valid_window=1)
+        current_step = int(time.time()) // totp.interval
+        for offset in (-1, 0, 1):
+            step = current_step + offset
+            if hmac.compare_digest(totp.at(step * totp.interval), token):
+                if self.totp_last_step is not None and step <= self.totp_last_step:
+                    return 'reused'
+                self.totp_last_step = step
+                db.session.commit()
+                return 'ok'
+        return 'invalid'
+
+    def verify_totp(self, token):
+        return self.check_totp(token) == 'ok'
+
+    @staticmethod
+    def _normalise_backup_code(code):
+        return ''.join(ch for ch in str(code or '').lower() if ch.isalnum())
+
+    @staticmethod
+    def _hash_backup_code(code):
+        key = current_app.config.get('SECRET_KEY') or current_app.secret_key or ''
+        digest = hmac.new(str(key).encode(), User._normalise_backup_code(code).encode(), hashlib.sha256)
+        return 'h1$' + digest.hexdigest()
+
+    def generate_backup_codes(self):
+        """Replace all backup codes. Returns the plaintext list (shown once, never stored)."""
+        codes = [secrets.token_hex(5) for _ in range(self.BACKUP_CODE_COUNT)]  # 10 hex chars each
+        self.backup_codes = [self._hash_backup_code(c) for c in codes]
+        return [f'{c[:5]}-{c[5:]}' for c in codes]
 
     def use_backup_code(self, code):
-        if not self.backup_codes or code not in self.backup_codes:
+        """Consume a backup code. Accepts 'abcde-12345' or 'abcde12345'; also old plaintext 8-char codes."""
+        norm = self._normalise_backup_code(code)
+        if not norm or not self.backup_codes:
             return False
-        self.backup_codes = [c for c in self.backup_codes if c != code]
+        hashed = self._hash_backup_code(norm)
+        match = None
+        for stored in self.backup_codes:  # compare against all entries: no early exit on timing
+            if stored.startswith('h1$'):
+                if hmac.compare_digest(stored, hashed):
+                    match = stored
+            elif hmac.compare_digest(self._normalise_backup_code(stored), norm):
+                match = stored  # legacy plaintext code created before hashing existed
+        if match is None:
+            return False
+        self.backup_codes = [c for c in self.backup_codes if c != match]
         db.session.commit()
         return True
+
+    @property
+    def backup_codes_remaining(self):
+        return len(self.backup_codes or [])
 
     def disable_totp(self):
         self.is_2fa_enabled = False
         self.totp_secret = None
+        self.totp_last_step = None
         self.backup_codes = []
 
     def to_dict(self, include_secret=False):
