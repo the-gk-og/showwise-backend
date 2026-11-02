@@ -158,7 +158,8 @@ def index():
     keys = SupportSigningKey.query.filter(SupportSigningKey.status != "revoked") \
         .order_by(SupportSigningKey.created_at.desc()).all()
     return render_template("support.html", ready=True, orgs=Organization.query.order_by(Organization.name).all(),
-                           last=last, disabled=disabled, keys=keys, env=public_keys_env(), recent=_recent())
+                           last=last, disabled=disabled, keys=keys, env=public_keys_env(), recent=_recent(),
+                           me=User.query.get(session["user_id"]))
 
 
 @support_bp.get("/org/<slug>")
