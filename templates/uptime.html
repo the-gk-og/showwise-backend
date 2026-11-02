@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Uptime - ShowWise Backend{% endblock %}
+{% block content %}
+<div class="page-header"><h1><i class="fas fa-heart-pulse"></i> Uptime & Health</h1><p>Current backend status and a live check of configured instances. Refresh the page to check again.</p></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1rem;margin-bottom:2rem;">
+<div class="card"><h2>Backend process</h2><p style="font-size:1.5rem;font-weight:800;color:var(--success);">Running</p><p>{{ (uptime_seconds // 86400) }}d {{ ((uptime_seconds % 86400) // 3600) }}h {{ ((uptime_seconds % 3600) // 60) }}m {{ uptime_seconds % 60 }}s</p></div>
+<div class="card"><h2>Database</h2><p style="font-size:1.5rem;font-weight:800;color:{{ 'var(--success)' if database_ok else 'var(--danger)' }};">{{ 'Connected' if database_ok else 'Unavailable' }}</p><p>Checked with a simple database query.</p></div>
+<div class="card"><h2>Instances</h2><p style="font-size:1.5rem;font-weight:800;">{{ instances|length }}</p><p>Configured organizations</p></div>
+</div>
+<div class="card"><h2 style="margin-bottom:1rem;">Instance health checks</h2><p style="margin-bottom:1rem;color:var(--gray-600);">Last checked at {{ checked_at|sfmt }} UTC. This is a current reachability check, not historical uptime monitoring.</p><div class="table-container"><table><thead><tr><th>Instance</th><th>URL</th><th>Status</th><th>Response</th><th>Latency</th></tr></thead><tbody>
+{% for item in instances %}<tr><td><strong>{{ item.org.name }}</strong><br><code>{{ item.org.slug }}</code></td><td>{{ item.org.url or '—' }}</td><td><strong style="color:{% if item.status == 'up' %}var(--success){% elif item.status in ['down','blocked'] %}var(--danger){% else %}var(--warning){% endif %};">{{ item.status|upper }}</strong></td><td>{{ item.detail }}</td><td>{{ (item.latency_ms|string) + ' ms' if item.latency_ms is not none else '—' }}</td></tr>
+{% else %}<tr><td colspan="5">No instances configured.</td></tr>{% endfor %}
+</tbody></table></div><p style="margin-top:1rem;"><a class="btn btn-secondary" href="{{ url_for('uptime_dashboard') }}"><i class="fas fa-rotate"></i> Check again</a></p></div>
+{% endblock %}
