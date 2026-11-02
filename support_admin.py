@@ -305,7 +305,7 @@ def _api_user_2fa_verify():
 def init_support_admin(app, limiter=None):
     app.register_blueprint(support_bp)
     app.add_url_rule("/api/user/2fa/setup", endpoint="support_2fa_setup_api",
-                     view_func=login_required(_api_user_2fa_setup), methods=["GET"])
+                     view_func=login_required(_api_user_2fa_setup), methods=["POST"])
     app.add_url_rule("/api/user/2fa/verify", endpoint="support_2fa_verify_api",
                      view_func=login_required(_api_user_2fa_verify), methods=["POST"])
     if limiter is not None:  # minting is also rate limited per IP
