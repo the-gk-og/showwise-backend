@@ -53,8 +53,8 @@ $("start")?.addEventListener("click", async () => {
 });
 $("verify")?.addEventListener("submit", async e => {
   e.preventDefault(); $("err").textContent = "";
-  const token = $("token").value.replace(/[\\s-]/g, "");
-  if (!/^\\d{6}$/.test(token)) { $("err").textContent = "Enter the current 6-digit authenticator code."; return; }
+  const token = $("token").value.replace(/[\s-]/g, "");
+  if (!/^[0-9]{6}$/.test(token)) { $("err").textContent = "Enter the current 6-digit authenticator code."; return; }
   try {
     const response = await fetch("/api/user/2fa/verify", {method: "POST", credentials: "same-origin",
       headers: {"Content-Type": "application/json", "X-CSRFToken": csrf, "Accept": "application/json"}, body: JSON.stringify({token})});
