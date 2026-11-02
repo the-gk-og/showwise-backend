@@ -30,7 +30,7 @@
 <script>
 const csrf = "{{ csrf_token() }}", $ = id => document.getElementById(id);
 $("start")?.addEventListener("click", async () => {
-  const r = await fetch("/api/user/2fa/setup", {credentials: "same-origin"}), d = await r.json();
+  const r = await fetch("/api/user/2fa/setup", {method: "POST", credentials: "same-origin", headers: {"X-CSRFToken": csrf}}), d = await r.json();
   if (!r.ok) { $("err").textContent = d.error || "Setup failed"; return; }
   $("qr").src = "data:image/png;base64," + d.qr_code; $("secret").textContent = d.secret;
   $("step1").style.display = "none"; $("step2").style.display = "block";
